@@ -8,7 +8,6 @@ import pytorch_lightning as pl
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 
-import hparams_
 
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -22,36 +21,22 @@ DATASETS = [
 
 
 class SubpopDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir, batch_size, num_workers, dataset, hparams):
+    def __init__(self, data_dir, batch_size, num_workers, dataset, hparams, train_attr):
         super().__init__()
+        
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.dataset = dataset
-        self.hparams = hparams
-
-    def prepare_data(self):
-        # data downloaded here once
-        # single gpu
-        
+        self.params = hparams
+        self.train_attr = train_attr
 
     def setup(self, stage=None):
         # data is loader here
         # multi gpu
-        entire_dataset = datasets.MNIST(
-            root=self.data_dir,
-            train=True,
-            transform=transforms.ToTensor(),
-            download=False,
-        )
-        self.train_ds, self.val_ds = random_split(entire_dataset, [50000, 10000])
-
-        self.test_ds = datasets.MNIST(
-            root=self.data_dir,
-            train=False,
-            transform=transforms.ToTensor(),
-            download=False,
-        )
+        self.train_ds = CheXpertNoFinding(self.data_dir, 'tr', self.params, train_attr=self.train_attr)
+        self.val_ds = CheXpertNoFinding(self.data_dir, 'va', self.params)
+        self.test_ds = CheXpertNoFinding(self.data_dir, 'te', self.params)
 
     def train_dataloader(self):
         return DataLoader(

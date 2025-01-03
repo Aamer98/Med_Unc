@@ -1,5 +1,5 @@
 import numpy as np
-from subpopbench.utils import misc
+from utils import misc
 
 
 def _define_hparam(hparams, hparam_name, default_val, random_val_fn):
