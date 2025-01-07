@@ -5,7 +5,12 @@ import torch
 from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
-import torchmetrics
+from torchmetrics import MetricCollection
+from torchmetrics.classification import (MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassCalibrationError, MulticlassAUROC, AveragePrecision, MulticlassCohenKappa, MulticlassF1Score, MulticlassROC, MulticlassPrecisionRecallCurve, MulticlassJaccardIndex)
+
+from sklearn.metrics import (accuracy_score, confusion_matrix, roc_auc_score, average_precision_score,
+                             balanced_accuracy_score, recall_score, brier_score_loss, log_loss, classification_report)
+
 
 import torchvision.models  # https://github.com/pytorch/hub/issues/46
 from transformers import BertModel, DistilBertModel, GPT2Model, AutoModel
@@ -14,14 +19,13 @@ from torch.hub import load_state_dict_from_url
 
 import wandb
 
-from  models import wide_resnet, networks, resnet50_dropout, optimizers
+from  models import wide_resnet, networks, resnet50_dropout
 
 
 ALGORITHMS = [
     "ERM",
     "MCDropout",
     "DeepEnsemble",
-    "BayesianNN",
     "TTA"]
 
 
@@ -43,14 +47,14 @@ class Algorithm(pl.LightningModule):
         self.num_attributes = num_attributes
         self.num_examples = num_examples
 
-        # compute the accuracy -- no need to roll your own!
-        self.train_acc = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes)
-        self.valid_acc = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes)
-        self.test_acc = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes)
+        metrics = MetricCollection([MulticlassAccuracy(num_classes), MulticlassPrecision(num_classes), MulticlassRecall(num_classes),
+            MulticlassCalibrationError(num_classes), MulticlassAUROC(num_classes), 
+            MulticlassCohenKappa(num_classes), MulticlassF1Score(num_classes), MulticlassJaccardIndex(num_classes)
+        ])
 
-        self.train_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes)
-        self.valid_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes)
-        self.test_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes)
+        self.train_metrics = metrics.clone(prefix='train_')
+        self.valid_metrics = metrics.clone(prefix='val_')
+        self.test_metrics = metrics.clone(prefix='test_')
 
     def forward(self, x):
         raise NotImplementedError
@@ -74,30 +78,31 @@ class Algorithm(pl.LightningModule):
     def loss(self, xs, ys):
         raise NotImplementedError
 
-    # def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self):
 
-    #     validation_step_outputs = self.validation_step_outputs
+        validation_step_outputs = self.validation_step_outputs
+        dummy_size = [1]+ list(self.hparams["input_size"])
+        dummy_input = torch.zeros(dummy_size, device=self.device)
+        model_filename = f"weights/model_{str(self.global_step).zfill(5)}.onnx"
+        torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
+        artifact = wandb.Artifact(name="model.ckpt", type="model")
+        artifact.add_file(model_filename)
+        self.logger.experiment.log_artifact(artifact)
 
-    #     dummy_input = torch.zeros(self.hparams["input_size"], device=self.device)
-    #     model_filename = f"weights/model_{str(self.global_step).zfill(5)}.onnx"
-    #     torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
-    #     artifact = wandb.Artifact(name="model.ckpt", type="model")
-    #     artifact.add_file(model_filename)
-    #     self.logger.experiment.log_artifact(artifact)
+        flattened_logits = torch.flatten(torch.cat(validation_step_outputs))
+        self.logger.experiment.log(
+            {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
+            "global_step": self.global_step})
 
-    #     flattened_logits = torch.flatten(torch.cat(validation_step_outputs))
-    #     self.logger.experiment.log(
-    #         {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
-    #         "global_step": self.global_step})
-
-    # # save model in ONNX format
-    # def on_test_epoch_end(self):  # args are defined as part of pl API
-    #     dummy_input = torch.zeros(self.hparams["input_size"], device=self.device)
-    #     model_filename = "weights/model_final.onnx"
-    #     self.to_onnx(model_filename, dummy_input, export_params=True)
-    #     artifact = wandb.Artifact(name="model.ckpt", type="model")
-    #     artifact.add_file(model_filename)
-    #     wandb.log_artifact(artifact)
+    # save model in ONNX format
+    def on_test_epoch_end(self):  # args are defined as part of pl API
+        dummy_size = [1]+ list(self.hparams["input_size"])
+        dummy_input = torch.zeros(dummy_size, device=self.device)
+        model_filename = "weights/model_final.onnx"
+        self.to_onnx(model_filename, dummy_input, export_params=True)
+        artifact = wandb.Artifact(name="model.ckpt", type="model")
+        artifact.add_file(model_filename)
+        wandb.log_artifact(artifact)
 
     def configure_optimizers(self):
         raise NotImplementedError
@@ -167,14 +172,9 @@ class ERM(Algorithm):
     def training_step(self, batch, batch_idx):
         loss, logits, y = self._common_step(batch, batch_idx)
         preds = logits.argmax(-1)
-        accuracy = self.train_acc(preds, y)
-        f1_score = self.train_f1(preds, y)
+        output = self.train_metrics(logits, y)
         self.log_dict(
-            {
-                "train/loss": loss,
-                "train/accuracy": accuracy,
-                "train/f1_score": f1_score,
-            },
+            output,
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -188,14 +188,9 @@ class ERM(Algorithm):
     def validation_step(self, batch, batch_idx):
         loss, logits, y = self._common_step(batch, batch_idx)
         preds = logits.argmax(-1)
-        accuracy = self.valid_acc(preds, y)
-        f1_score = self.valid_f1(preds, y)
+        output = self.valid_metrics(logits, y)
         self.log_dict(
-            {
-                "val/loss": loss,
-                "val/accuracy": accuracy,
-                "val/f1_score": f1_score,
-            },
+            output,
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -208,14 +203,9 @@ class ERM(Algorithm):
     def test_step(self, batch, batch_idx):
         loss, logits, y = self._common_step(batch, batch_idx)
         preds = logits.argmax(-1)
-        accuracy = self.test_acc(preds, y)
-        f1_score = self.test_f1(preds, y)
+        output = self.test_metrics(logits, y)
         self.log_dict(
-            {
-                "test/loss": loss,
-                "test/accuracy": accuracy,
-                "test/f1_score": f1_score,
-            },
+            output,
             on_step=False,
             on_epoch=True,
             prog_bar=True,

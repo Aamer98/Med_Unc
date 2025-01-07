@@ -17,16 +17,15 @@ class MyPrintingCallback(Callback):
 class ImagePredictionLogger(Callback):
     def __init__(self, val_samples, num_samples=32):
         super().__init__()
-        self.val_imgs, self.val_labels = val_samples
+        _, self.val_imgs, self.val_labels, _ = val_samples
         self.val_imgs = self.val_imgs[:num_samples]
         self.val_labels = self.val_labels[:num_samples]
 
     def on_validation_epoch_end(self, trainer, pl_module):
 
         val_imgs = self.val_imgs.to(device=pl_module.device)
-        x = val_imgs.reshape(val_imgs.shape[0], -1)
 
-        logits = pl_module(x)
+        logits = pl_module(val_imgs)
         preds = torch.argmax(logits, -1)
 
         trainer.logger.experiment.log(

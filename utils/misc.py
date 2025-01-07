@@ -33,6 +33,9 @@ def wandb_init(args):
     print(f"===> Wandb initialized with run_id: {run.id}")
 
 
+
+
+
 def prepare_folders(args):
     folders_util = [
         args.output_dir,

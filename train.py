@@ -16,7 +16,7 @@ os.environ["WANDB_MODE"] = "offline"
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Subpopulation Shift Benchmark")
+    parser = argparse.ArgumentParser(description="Uncertainty Subpop Shifts Project")
     # training
     parser.add_argument(
         "--dataset", type=str, default="CheXpertNoFinding", choices=dataset.DATASETS
@@ -36,7 +36,6 @@ if __name__ == "__main__":
     parser.add_argument("--exp_name", type=str, default="test")
     parser.add_argument("--seed", type=int, default=0, help="Seed for everything else")
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--wandb_logging", action="store_true")
     # uncertainty measures
     parser.add_argument("--dropout_iters", type=int, default=5)
     # early stopping
@@ -124,13 +123,13 @@ if __name__ == "__main__":
         devices=config.DEVICES,
         min_epochs=config.MIN_EPOCHS,
         max_epochs=config.MAX_EPOCHS,
-        precision=config.PRECISION,)
-    #     callbacks=[
-    #         MyPrintingCallback(),
-    #         ImagePredictionLogger(samples),
-    #         EarlyStopping(monitor="val/loss"),
-    #     ],
-    # )
+        precision=config.PRECISION,
+        callbacks=[
+            MyPrintingCallback(),
+            ImagePredictionLogger(samples),
+            EarlyStopping(monitor="val/loss"),
+        ],
+    )
     trainer.fit(algorithm, dm)
     trainer.validate(algorithm, dm)
     trainer.test(algorithm, dm)
