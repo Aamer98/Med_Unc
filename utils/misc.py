@@ -14,13 +14,11 @@ import wandb
 def wandb_init(args):
     os.environ["WANDB_API_KEY"] = "7a9cbed74d12db3de9cef466bb7b7cf08bdf1ea4"
     os.environ["WANDB_MODE"] = "offline"
-    
 
-    if args.algorithm == 'MCDropout':
-        exp_name = f'ALG_{args.algorithm}_iters_{args.mc_iters}'
+    if args.algorithm == "MCDropout":
+        exp_name = f"ALG_{args.algorithm}_iters_{args.mc_iters}"
     else:
-        exp_name = f'ALG_{args.algorithm}'
-
+        exp_name = f"ALG_{args.algorithm}"
 
     run = wandb.init(
         # Set the project where this run will be logged
@@ -36,8 +34,10 @@ def wandb_init(args):
 
 
 def prepare_folders(args):
-    folders_util = [args.output_dir,
-                    os.path.join(args.output_dir, args.output_folder_name, args.store_name)]
+    folders_util = [
+        args.output_dir,
+        os.path.join(args.output_dir, args.output_folder_name, args.store_name),
+    ]
     for folder in folders_util:
         if not os.path.exists(folder):
             print(f"===> Creating folder: {folder}")
@@ -49,9 +49,13 @@ def l2_between_dicts(dict_1, dict_2):
     dict_1_values = [dict_1[key] for key in sorted(dict_1.keys())]
     dict_2_values = [dict_2[key] for key in sorted(dict_1.keys())]
     return (
-        torch.cat(tuple([t.view(-1) for t in dict_1_values])) -
-        torch.cat(tuple([t.view(-1) for t in dict_2_values]))
-    ).pow(2).mean()
+        (
+            torch.cat(tuple([t.view(-1) for t in dict_1_values]))
+            - torch.cat(tuple([t.view(-1) for t in dict_2_values]))
+        )
+        .pow(2)
+        .mean()
+    )
 
 
 class MovingAverage:
@@ -111,6 +115,7 @@ def make_balanced_weights_per_sample(targets):
 def pdb():
     sys.stdout = sys.__stdout__
     import pdb
+
     print("Launching PDB, enter 'n' to step to parent function.")
     pdb.set_trace()
 
@@ -124,7 +129,7 @@ def seed_hash(*args):
 
 
 def print_separator():
-    print("="*80)
+    print("=" * 80)
 
 
 def print_row(row, colwidth=10, latex=False):
@@ -153,6 +158,7 @@ def safe_load(parsed):
 
 class _SplitDataset(torch.utils.data.Dataset):
     """Used by split_dataset"""
+
     def __init__(self, underlying_dataset, keys):
         super(_SplitDataset, self).__init__()
         self.underlying_dataset = underlying_dataset
@@ -170,7 +176,7 @@ def split_dataset(dataset, n, seed=0):
     Return a pair of dataset corresponding to a random split of the given dataset,
     with n data points in the first dataset and the rest in the last using the given random seed
     """
-    assert(n <= len(dataset))
+    assert n <= len(dataset)
     keys = list(range(len(dataset)))
     np.random.RandomState(seed).shuffle(keys)
     keys_1 = keys[:n]
@@ -194,7 +200,7 @@ def random_pairs_of_minibatches(minibatches):
     return pairs
 
 
-def mixup_data(x, y, alpha=1., device="cpu"):
+def mixup_data(x, y, alpha=1.0, device="cpu"):
     lam = np.random.beta(alpha, alpha) if alpha > 0 else 1
 
     batch_size = x.size()[0]
@@ -216,8 +222,12 @@ def accuracy(network, loader, device):
     with torch.no_grad():
         for _, x, y, a in loader:
             p = network.predict(x.to(device))
-            p = (p > 0).cpu().eq(y).float() if p.squeeze().ndim == 1 else p.argmax(1).cpu().eq(y).float()
-            groups = (num_attributes * y + a)
+            p = (
+                (p > 0).cpu().eq(y).float()
+                if p.squeeze().ndim == 1
+                else p.argmax(1).cpu().eq(y).float()
+            )
+            groups = num_attributes * y + a
             for g in groups.unique():
                 corrects[g] += p[groups == g].sum()
                 totals[g] += (groups == g).sum()
@@ -233,12 +243,12 @@ def accuracy(network, loader, device):
 def adjust_learning_rate(optimizer, lr, step, total_steps, schedule, cos=False):
     """Decay the learning rate based on schedule"""
     if cos:  # cosine lr schedule
-        lr *= 0.5 * (1. + math.cos(math.pi * step / total_steps))
+        lr *= 0.5 * (1.0 + math.cos(math.pi * step / total_steps))
     else:  # stepwise lr schedule
         for milestone in schedule:
-            lr *= 0.1 if step >= milestone else 1.
+            lr *= 0.1 if step >= milestone else 1.0
     for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        param_group["lr"] = lr
 
 
 class Tee:

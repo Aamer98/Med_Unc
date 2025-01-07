@@ -9,21 +9,21 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 
 
-
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-DATASETS = [
-    "MIMICNoFinding",
-    "MIMICNotes",
-    "CXRMultisite",
-    "CheXpertNoFinding"
-]
+DATASETS = ["MIMICNoFinding", "MIMICNotes", "CXRMultisite", "CheXpertNoFinding"]
+
+def get_dataset_class(dataset_name):
+    """Return the dataset class with the given name."""
+    if dataset_name not in globals():
+        raise NotImplementedError(f"Dataset not found: {dataset_name}")
+    return globals()[dataset_name]
 
 
 class SubpopDataModule(pl.LightningDataModule):
     def __init__(self, data_dir, batch_size, num_workers, dataset, hparams, train_attr):
         super().__init__()
-        
+
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -31,12 +31,15 @@ class SubpopDataModule(pl.LightningDataModule):
         self.params = hparams
         self.train_attr = train_attr
 
+
     def setup(self, stage=None):
-        # data is loader here
+        # data is loaded here
         # multi gpu
-        self.train_ds = CheXpertNoFinding(self.data_dir, 'tr', self.params, train_attr=self.train_attr)
-        self.val_ds = CheXpertNoFinding(self.data_dir, 'va', self.params)
-        self.test_ds = CheXpertNoFinding(self.data_dir, 'te', self.params)
+        self.train_ds = CheXpertNoFinding(
+            self.data_dir, "tr", self.params, train_attr=self.train_attr
+        )
+        self.val_ds = CheXpertNoFinding(self.data_dir, "va", self.params)
+        self.test_ds = CheXpertNoFinding(self.data_dir, "te", self.params)
 
     def train_dataloader(self):
         return DataLoader(
@@ -63,27 +66,35 @@ class SubpopDataModule(pl.LightningDataModule):
         )
 
 
-
 class SubpopDataset:
-    N_STEPS = 5001           # Default, subclasses may override
-    CHECKPOINT_FREQ = 100    # Default, subclasses may override
-    N_WORKERS = 8            # Default, subclasses may override
-    INPUT_SHAPE = None       # Subclasses should override
-    SPLITS = {               # Default, subclasses may override
-        'tr': 0,
-        'va': 1,
-        'te': 2
-    }
-    EVAL_SPLITS = ['te']     # Default, subclasses may override
+    N_STEPS = 5001  # Default, subclasses may override
+    CHECKPOINT_FREQ = 100  # Default, subclasses may override
+    N_WORKERS = 8  # Default, subclasses may override
+    INPUT_SHAPE = None  # Subclasses should override
+    SPLITS = {"tr": 0, "va": 1, "te": 2}  # Default, subclasses may override
+    EVAL_SPLITS = ["te"]  # Default, subclasses may override
 
-    def __init__(self, root, split, metadata, transform, train_attr='yes', subsample_type=None, duplicates=None):
+    def __init__(
+        self,
+        root,
+        split,
+        metadata,
+        transform,
+        train_attr="yes",
+        subsample_type=None,
+        duplicates=None,
+    ):
         df = pd.read_csv(metadata)
         df = df[df["split"] == (self.SPLITS[split])]
 
         self.idx = list(range(len(df)))
-        self.x = df["filename"].astype(str).map(lambda x: os.path.join(root, x)).tolist()
+        self.x = (
+            df["filename"].astype(str).map(lambda x: os.path.join(root, x)).tolist()
+        )
         self.y = df["y"].tolist()
-        self.a = df["a"].tolist() if train_attr == 'yes' else [0] * len(df["a"].tolist())
+        self.a = (
+            df["a"].tolist() if train_attr == "yes" else [0] * len(df["a"].tolist())
+        )
         self.transform_ = transform
         self._count_groups()
 
@@ -105,21 +116,30 @@ class SubpopDataset:
             self.class_sizes[self.y[i]] += 1
 
         for i in self.idx:
-            self.weights_g.append(len(self) / self.group_sizes[self.num_attributes * self.y[i] + self.a[i]])
+            self.weights_g.append(
+                len(self)
+                / self.group_sizes[self.num_attributes * self.y[i] + self.a[i]]
+            )
             self.weights_y.append(len(self) / self.class_sizes[self.y[i]])
 
     def subsample(self, subsample_type):
         assert subsample_type in {"group", "class"}
         perm = torch.randperm(len(self)).tolist()
-        min_size = min(list(self.group_sizes)) if subsample_type == "group" else min(list(self.class_sizes))
+        min_size = (
+            min(list(self.group_sizes))
+            if subsample_type == "group"
+            else min(list(self.class_sizes))
+        )
 
         counts_g = [0] * self.num_attributes * self.num_labels
         counts_y = [0] * self.num_labels
         new_idx = []
         for p in perm:
             y, a = self.y[self.idx[p]], self.a[self.idx[p]]
-            if (subsample_type == "group" and counts_g[self.num_attributes * int(y) + int(a)] < min_size) or (
-                    subsample_type == "class" and counts_y[int(y)] < min_size):
+            if (
+                subsample_type == "group"
+                and counts_g[self.num_attributes * int(y) + int(a)] < min_size
+            ) or (subsample_type == "class" and counts_y[int(y)] < min_size):
                 counts_g[self.num_attributes * int(y) + int(a)] += 1
                 counts_y[int(y)] += 1
                 new_idx.append(self.idx[p])
@@ -145,25 +165,32 @@ class SubpopDataset:
         return len(self.idx)
 
 
-
-
 class BaseImageDataset(SubpopDataset):
 
-    def __init__(self, metadata, split, train_attr='yes', subsample_type=None, duplicates=None):
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ])
+    def __init__(
+        self, metadata, split, train_attr="yes", subsample_type=None, duplicates=None
+    ):
+        transform = transforms.Compose(
+            [
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
         self.data_type = "images"
-        super().__init__('/', split, metadata, transform, train_attr, subsample_type, duplicates)
+        super().__init__(
+            "/", split, metadata, transform, train_attr, subsample_type, duplicates
+        )
 
     def transform(self, x):
-        if self.__class__.__name__ in ['MIMICNoFinding', 'CXRMultisite'] and 'MIMIC-CXR-JPG' in x:
+        if (
+            self.__class__.__name__ in ["MIMICNoFinding", "CXRMultisite"]
+            and "MIMIC-CXR-JPG" in x
+        ):
             reduced_img_path = list(Path(x).parts)
-            reduced_img_path[-5] = 'downsampled_files'
-            reduced_img_path = Path(*reduced_img_path).with_suffix('.png')
+            reduced_img_path[-5] = "downsampled_files"
+            reduced_img_path = Path(*reduced_img_path).with_suffix(".png")
 
             if reduced_img_path.is_file():
                 x = str(reduced_img_path.resolve())
@@ -171,15 +198,31 @@ class BaseImageDataset(SubpopDataset):
         return self.transform_(Image.open(x).convert("RGB"))
 
 
-
 class MIMICNoFinding(BaseImageDataset):
     N_STEPS = 20001
     CHECKPOINT_FREQ = 1000
     N_WORKERS = 16
-    INPUT_SHAPE = (3, 224, 224,)
+    INPUT_SHAPE = (
+        3,
+        224,
+        224,
+    )
 
-    def __init__(self, data_path, split, hparams, train_attr='yes', subsample_type=None, duplicates=None):
-        metadata = os.path.join(data_path, "MIMIC-CXR-JPG", 'physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta', "metadata_no_finding.csv")
+    def __init__(
+        self,
+        data_path,
+        split,
+        hparams,
+        train_attr="yes",
+        subsample_type=None,
+        duplicates=None,
+    ):
+        metadata = os.path.join(
+            data_path,
+            "MIMIC-CXR-JPG",
+            "physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta",
+            "metadata_no_finding.csv",
+        )
         super().__init__(metadata, split, train_attr, subsample_type, duplicates)
 
 
@@ -187,10 +230,24 @@ class CheXpertNoFinding(BaseImageDataset):
     N_STEPS = 20001
     CHECKPOINT_FREQ = 1000
     N_WORKERS = 4
-    INPUT_SHAPE = (3, 224, 224,)
+    INPUT_SHAPE = (
+        3,
+        224,
+        224,
+    )
 
-    def __init__(self, data_path, split, hparams, train_attr='yes', subsample_type=None, duplicates=None):
-        metadata = os.path.join(data_path, "chexpert", 'subpop_bench_meta', "metadata_no_finding.csv")
+    def __init__(
+        self,
+        data_path,
+        split,
+        hparams,
+        train_attr="yes",
+        subsample_type=None,
+        duplicates=None,
+    ):
+        metadata = os.path.join(
+            data_path, "chexpert", "subpop_bench_meta", "metadata_no_finding.csv"
+        )
         super().__init__(metadata, split, train_attr, subsample_type, duplicates)
 
 
@@ -198,17 +255,29 @@ class CXRMultisite(BaseImageDataset):
     N_STEPS = 20001
     CHECKPOINT_FREQ = 1000
     N_WORKERS = 16
-    INPUT_SHAPE = (3, 224, 224,)
-    SPLITS = {               
-        'tr': 0,
-        'va': 1,
-        'te': 2,
-        'deploy': 3
-    }
-    EVAL_SPLITS = ['te', 'deploy']
+    INPUT_SHAPE = (
+        3,
+        224,
+        224,
+    )
+    SPLITS = {"tr": 0, "va": 1, "te": 2, "deploy": 3}
+    EVAL_SPLITS = ["te", "deploy"]
 
-    def __init__(self, data_path, split, hparams, train_attr='yes', subsample_type=None, duplicates=None):
-        metadata = os.path.join(data_path, "MIMIC-CXR-JPG", 'physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta', "metadata_multisite.csv")
+    def __init__(
+        self,
+        data_path,
+        split,
+        hparams,
+        train_attr="yes",
+        subsample_type=None,
+        duplicates=None,
+    ):
+        metadata = os.path.join(
+            data_path,
+            "MIMIC-CXR-JPG",
+            "physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta",
+            "metadata_multisite.csv",
+        )
         super().__init__(metadata, split, train_attr, subsample_type, duplicates)
 
 
@@ -217,12 +286,24 @@ class MIMICNotes(SubpopDataset):
     CHECKPOINT_FREQ = 200
     INPUT_SHAPE = (10000,)
 
-    def __init__(self, data_path, split, hparams, train_attr='yes', subsample_type=None, duplicates=None):
-        assert hparams['text_arch'] == 'bert-base-uncased'
-        metadata = os.path.join(data_path, "mimic_notes", 'subpop_bench_meta', "metadata.csv")
-        self.x_array = np.load(os.path.join(data_path, "mimic_notes", 'features.npy'))
+    def __init__(
+        self,
+        data_path,
+        split,
+        hparams,
+        train_attr="yes",
+        subsample_type=None,
+        duplicates=None,
+    ):
+        assert hparams["text_arch"] == "bert-base-uncased"
+        metadata = os.path.join(
+            data_path, "mimic_notes", "subpop_bench_meta", "metadata.csv"
+        )
+        self.x_array = np.load(os.path.join(data_path, "mimic_notes", "features.npy"))
         self.data_type = "tabular"
-        super().__init__("", split, metadata, self.transform, train_attr, subsample_type, duplicates)
+        super().__init__(
+            "", split, metadata, self.transform, train_attr, subsample_type, duplicates
+        )
 
     def transform(self, x):
-        return self.x_array[int(x), :].astype('float32')
+        return self.x_array[int(x), :].astype("float32")
