@@ -88,7 +88,7 @@ class Algorithm(pl.LightningModule):
         artifact = wandb.Artifact(name="model.ckpt", type="model")
         artifact.add_file(model_filename)
         self.logger.experiment.log_artifact(artifact)
-
+        breakpoint()
         flattened_logits = torch.flatten(torch.cat(validation_step_outputs))
         self.logger.experiment.log(
             {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
@@ -175,7 +175,7 @@ class ERM(Algorithm):
         output = self.train_metrics(logits, y)
         self.log_dict(
             output,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
@@ -191,7 +191,7 @@ class ERM(Algorithm):
         output = self.valid_metrics(logits, y)
         self.log_dict(
             output,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,
@@ -206,7 +206,7 @@ class ERM(Algorithm):
         output = self.test_metrics(logits, y)
         self.log_dict(
             output,
-            on_step=False,
+            on_step=True,
             on_epoch=True,
             prog_bar=True,
             logger=True,

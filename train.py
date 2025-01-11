@@ -35,7 +35,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--exp_name", type=str, default="test")
     parser.add_argument("--seed", type=int, default=0, help="Seed for everything else")
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--num_workers", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=128)
     # uncertainty measures
     parser.add_argument("--dropout_iters", type=int, default=5)
     # early stopping
@@ -88,12 +90,12 @@ if __name__ == "__main__":
 
     hparams = hparams_registry.default_hparams(args.algorithm, args.dataset)
     hparams.update({"image_arch": args.image_arch, "text_arch": args.text_arch})
-
+    
     wandb_logger = WandbLogger(project="lit-wandb")
     dm = SubpopDataModule(
         data_dir=args.data_dir,
-        batch_size=hparams["batch_size"],
-        num_workers=config.NUM_WORKERS,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
         dataset=args.dataset,
         hparams=hparams,
         train_attr=args.train_attr,
@@ -105,8 +107,8 @@ if __name__ == "__main__":
     num_labels = 2
     num_attributes = 1
     data_type = 'images'
-    dataset_len = 167093
-    group_sizes = [150221, 16872]
+    dataset_len = 2
+    group_sizes = [2, 1]
     algorithm_class = model.get_algorithm_class(args.algorithm)
     algorithm = algorithm_class(data_type, input_shape, num_labels, num_attributes,
                                 dataset_len, hparams, grp_sizes=group_sizes)
@@ -116,13 +118,13 @@ if __name__ == "__main__":
 
     # grab samples to log predictions on
     samples = next(iter(dm.val_dataloader()))
-
+    breakpoint()
     trainer = pl.Trainer(
         logger=wandb_logger,
         accelerator=config.ACCELERATOR,
         devices=config.DEVICES,
-        min_epochs=config.MIN_EPOCHS,
-        max_epochs=config.MAX_EPOCHS,
+        min_epochs=1,
+        max_epochs=args.epochs,
         precision=config.PRECISION,
         callbacks=[
             MyPrintingCallback(),
