@@ -1,0 +1,11 @@
+numpy==2.2.1
+pandas==2.2.3
+Pillow==11.1.0
+pytorch_lightning==2.5.0.post0
+scikit_learn==1.6.1
+scipy==1.15.1
+timm==1.0.13
+torch==2.5.1+computecanada
+torchmetrics==1.6.1
+torchvision==0.20.1+computecanada
+transformers==4.47.1
