@@ -12,7 +12,7 @@ import hparams_registry
 
 torch.set_float32_matmul_precision("medium")
 os.environ["WANDB_API_KEY"] = "7a9cbed74d12db3de9cef466bb7b7cf08bdf1ea4"
-os.environ["WANDB_MODE"] = "offline"
+os.environ["WANDB_MODE"] = "online"
 
 
 if __name__ == "__main__":
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # grab samples to log predictions on
     samples = next(iter(dm.val_dataloader()))
-    breakpoint()
+    
     trainer = pl.Trainer(
         logger=wandb_logger,
         accelerator=config.ACCELERATOR,

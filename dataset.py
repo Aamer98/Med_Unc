@@ -55,11 +55,9 @@ class SubpopDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         # data is loaded here
         # multi gpu
-        self.train_ds = CheXpertNoFinding(
-            self.data_dir, "tr", self.params, train_attr=self.train_attr
-        )
-        self.val_ds = CheXpertNoFinding(self.data_dir, "va", self.params)
-        self.test_ds = CheXpertNoFinding(self.data_dir, "te", self.params)
+        self.train_ds = get_dataset_class(self.dataset)(self.data_dir, 'tr', self.params, train_attr=self.train_attr)
+        self.val_ds = get_dataset_class(self.dataset)(self.data_dir, 'va', self.params)
+        self.test_ds = get_dataset_class(self.dataset)(self.data_dir, 'te', self.params)
 
     def train_dataloader(self):
         return DataLoader(

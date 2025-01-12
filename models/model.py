@@ -52,9 +52,9 @@ class Algorithm(pl.LightningModule):
             MulticlassCohenKappa(num_classes), MulticlassF1Score(num_classes), MulticlassJaccardIndex(num_classes)
         ])
 
-        self.train_metrics = metrics.clone(prefix='train_')
-        self.valid_metrics = metrics.clone(prefix='val_')
-        self.test_metrics = metrics.clone(prefix='test_')
+        self.train_metrics = metrics.clone(prefix='train/')
+        self.valid_metrics = metrics.clone(prefix='val/')
+        self.test_metrics = metrics.clone(prefix='test/')
 
     def forward(self, x):
         raise NotImplementedError
@@ -88,8 +88,9 @@ class Algorithm(pl.LightningModule):
         artifact = wandb.Artifact(name="model.ckpt", type="model")
         artifact.add_file(model_filename)
         self.logger.experiment.log_artifact(artifact)
-        breakpoint()
+        
         flattened_logits = torch.flatten(torch.cat(validation_step_outputs))
+        breakpoint()
         self.logger.experiment.log(
             {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
             "global_step": self.global_step})
@@ -160,7 +161,7 @@ class ERM(Algorithm):
         )
         self.network = nn.Sequential(self.featurizer, self.classifier)
 
-        # log hyperparameters
+        # log model and hyperparameters
         self.save_hyperparameters()
 
     def return_feats(self, x):
@@ -180,6 +181,12 @@ class ERM(Algorithm):
             prog_bar=True,
             logger=True,
         )
+        self.log("train/loss", 
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,)
         return loss
 
     def on_validation_epoch_start(self):
@@ -196,6 +203,13 @@ class ERM(Algorithm):
             prog_bar=True,
             logger=True,
         )   
+        self.log("val/loss", 
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,)
+        breakpoint()
         self.validation_step_outputs.append(logits)     
         return logits
 
@@ -211,6 +225,11 @@ class ERM(Algorithm):
             prog_bar=True,
             logger=True,
         )
+        self.log({"test/loss": loss},
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,)
     
     def _common_step(self, batch, batch_idx):
         i, x, y, _a = batch

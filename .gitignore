@@ -1,3 +1,5 @@
 weights/
 wandb/
 logs/
+
+run_scripts.py
