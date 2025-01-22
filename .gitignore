@@ -1,5 +1,6 @@
 weights/
 wandb/
 logs/
+lit-wandb/
 
 run_scripts.py

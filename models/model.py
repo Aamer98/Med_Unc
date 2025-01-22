@@ -1,4 +1,4 @@
-import sys
+import os, sys
 sys.path.insert(0, '/home/aamer98/projects/def-ebrahimi/aamer98/repos/Med_Unc')
 
 import torch
@@ -6,13 +6,9 @@ from torch import nn, optim
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from torchmetrics import MetricCollection
-from torchmetrics.classification import (MulticlassAccuracy, MulticlassPrecision, MulticlassRecall, MulticlassCalibrationError, MulticlassAUROC, AveragePrecision, MulticlassCohenKappa, MulticlassF1Score, MulticlassROC, MulticlassPrecisionRecallCurve, MulticlassJaccardIndex)
+from torchmetrics.classification import (Accuracy, BinaryPrecision, BinaryRecall, BinaryPrecision, BinaryF1Score, MulticlassCalibrationError, BinaryAUROC, BinaryFairness, BinaryGroupStatRates)
 
-from sklearn.metrics import (accuracy_score, confusion_matrix, roc_auc_score, average_precision_score,
-                             balanced_accuracy_score, recall_score, brier_score_loss, log_loss, classification_report)
-
-
-import torchvision.models  # https://github.com/pytorch/hub/issues/46
+import torchvision.models  
 from transformers import BertModel, DistilBertModel, GPT2Model, AutoModel
 import timm
 from torch.hub import load_state_dict_from_url
@@ -20,14 +16,13 @@ from torch.hub import load_state_dict_from_url
 import wandb
 
 from  models import wide_resnet, networks, resnet50_dropout
-
+from models.custom_metrics import BrierScore
 
 ALGORITHMS = [
     "ERM",
     "MCDropout",
     "DeepEnsemble",
     "TTA"]
-
 
 
 def get_algorithm_class(algorithm_name):
@@ -47,14 +42,25 @@ class Algorithm(pl.LightningModule):
         self.num_attributes = num_attributes
         self.num_examples = num_examples
 
-        metrics = MetricCollection([MulticlassAccuracy(num_classes), MulticlassPrecision(num_classes), MulticlassRecall(num_classes),
-            MulticlassCalibrationError(num_classes), MulticlassAUROC(num_classes), 
-            MulticlassCohenKappa(num_classes), MulticlassF1Score(num_classes), MulticlassJaccardIndex(num_classes)
-        ])
+        metrics = MetricCollection([Accuracy(task="binary"), BinaryPrecision(),
+                                    BinaryRecall(), BinaryF1Score(), BinaryAUROC()])
+        
+        prob_metrics = MetricCollection([MulticlassCalibrationError(num_classes=num_classes), 
+                                        BrierScore(num_classes=num_classes)])
+        
+        group_metrics = MetricCollection([BinaryFairness(num_attributes)])
 
         self.train_metrics = metrics.clone(prefix='train/')
         self.valid_metrics = metrics.clone(prefix='val/')
         self.test_metrics = metrics.clone(prefix='test/')
+
+        self.train_prob_metrics = prob_metrics.clone(prefix='train/')
+        self.valid_prob_metrics = prob_metrics.clone(prefix='val/')
+        self.test_prob_metrics = prob_metrics.clone(prefix='test/')
+
+        self.train_group_metrics = group_metrics.clone(prefix='train/')
+        self.valid_group_metrics = group_metrics.clone(prefix='val/')
+        self.test_group_metrics = group_metrics.clone(prefix='test/')
 
     def forward(self, x):
         raise NotImplementedError
@@ -84,13 +90,14 @@ class Algorithm(pl.LightningModule):
         dummy_size = [1]+ list(self.hparams["input_size"])
         dummy_input = torch.zeros(dummy_size, device=self.device)
         model_filename = f"weights/model_{str(self.global_step).zfill(5)}.onnx"
+        os.makedirs("weights", exist_ok=True)
         torch.onnx.export(self, dummy_input, model_filename, opset_version=11)
         artifact = wandb.Artifact(name="model.ckpt", type="model")
         artifact.add_file(model_filename)
         self.logger.experiment.log_artifact(artifact)
         
         flattened_logits = torch.flatten(torch.cat(validation_step_outputs))
-        breakpoint()
+
         self.logger.experiment.log(
             {"valid/logits": wandb.Histogram(flattened_logits.to("cpu")),
             "global_step": self.global_step})
@@ -100,6 +107,7 @@ class Algorithm(pl.LightningModule):
         dummy_size = [1]+ list(self.hparams["input_size"])
         dummy_input = torch.zeros(dummy_size, device=self.device)
         model_filename = "weights/model_final.onnx"
+        os.makedirs("weights", exist_ok=True)
         self.to_onnx(model_filename, dummy_input, export_params=True)
         artifact = wandb.Artifact(name="model.ckpt", type="model")
         artifact.add_file(model_filename)
@@ -171,76 +179,87 @@ class ERM(Algorithm):
         return self.network(x)
     
     def training_step(self, batch, batch_idx):
-        loss, logits, y = self._common_step(batch, batch_idx)
-        preds = logits.argmax(-1)
-        output = self.train_metrics(logits, y)
+        loss, logits, y, atts = self._common_step(batch, batch_idx)
+        probs = F.softmax(logits, dim=-1)        
+        preds = probs.argmax(-1)
+        output = self.train_metrics(preds, y)
+        prob_output = self.train_prob_metrics(probs, y)
+        group_output = self.train_group_metrics(preds, y, atts)
+        breakpoint()
         self.log_dict(
-            output,
+            output | prob_output,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,
+            logger=True
         )
         self.log("train/loss", 
             loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,)
+            logger=True)
         return loss
 
     def on_validation_epoch_start(self):
         self.validation_step_outputs = []
 
     def validation_step(self, batch, batch_idx):
-        loss, logits, y = self._common_step(batch, batch_idx)
-        preds = logits.argmax(-1)
-        output = self.valid_metrics(logits, y)
+        loss, logits, y, atts = self._common_step(batch, batch_idx)
+        probs = F.softmax(logits, dim=-1)
+        preds = probs.argmax(-1)
+        output = self.valid_metrics(preds, y)
+        prob_output = self.valid_prob_metrics(probs, y)
+        # group_output = self.train_group_metrics(preds, y, atts)
         self.log_dict(
-            output,
+            output | prob_output,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,
-        )   
+            logger=True
+        )
         self.log("val/loss", 
             loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,)
-        breakpoint()
-        self.validation_step_outputs.append(logits)     
-        return logits
+            logger=True) 
+        self.validation_step_outputs.append(probs)     
+        return probs
 
 
     def test_step(self, batch, batch_idx):
-        loss, logits, y = self._common_step(batch, batch_idx)
-        preds = logits.argmax(-1)
-        output = self.test_metrics(logits, y)
+        loss, logits, y, atts = self._common_step(batch, batch_idx)
+        probs = F.softmax(logits, dim=-1)
+        preds = probs.argmax(-1)      
+        output = self.test_metrics(preds, y)
+        prob_output = self.valid_prob_metrics(probs, y)
+        group_output = self.train_group_metrics(preds, y, atts)
         self.log_dict(
-            output,
+            output | prob_output,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,
+            logger=True
         )
-        self.log({"test/loss": loss},
+        self.log("test/loss", 
+            loss,
             on_step=True,
             on_epoch=True,
             prog_bar=True,
-            logger=True,)
+            logger=True) 
     
     def _common_step(self, batch, batch_idx):
-        i, x, y, _a = batch
-        
+        i, x, y, a = batch
         loss, logits = self.loss(x, y)
-        return loss, logits, y
+        return loss, logits, y, a
 
     # method to get loss on a batch
     def loss(self, xs, ys):
         logits = self.forward(xs) # calls self.forward
-        loss = F.nll_loss(logits, ys)
+        # log_probs = F.log_softmax(logits, dim=-1)
+        # loss = F.nll_loss(logits, ys)
+        loss = F.cross_entropy(logits, ys)
         return loss, logits
 
     def configure_optimizers(self):

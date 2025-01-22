@@ -10,7 +10,6 @@ from pytorch_lightning.loggers import WandbLogger
 from callbacks import MyPrintingCallback, ImagePredictionLogger, EarlyStopping
 import hparams_registry
 
-torch.set_float32_matmul_precision("medium")
 os.environ["WANDB_API_KEY"] = "7a9cbed74d12db3de9cef466bb7b7cf08bdf1ea4"
 os.environ["WANDB_MODE"] = "online"
 
@@ -26,16 +25,16 @@ if __name__ == "__main__":
     parser.add_argument("--train_attr", type=str, default="yes", choices=["yes", "no"])
     # others
     parser.add_argument(
-        "--data_dir", type=str, default="/home/aamer98/scratch/data/subpopbench"
+        "--data_dir", type=str, default="/home/as26840@ens.ad.etsmtl.ca/data/subpopbench"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/home/aamer98/projects/def-ebrahimi/aamer98/repos/Med_Unc/logs",
+        default="/home/as26840@ens.ad.etsmtl.ca/repos/Med_Unc/logs",
     )
     parser.add_argument("--exp_name", type=str, default="test")
     parser.add_argument("--seed", type=int, default=0, help="Seed for everything else")
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--num_workers", type=int, default=16)
     parser.add_argument("--batch_size", type=int, default=128)
     # uncertainty measures
@@ -88,9 +87,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    pl.seed_everything(args.seed)
     hparams = hparams_registry.default_hparams(args.algorithm, args.dataset)
-    hparams.update({"image_arch": args.image_arch, "text_arch": args.text_arch})
-    
+    hparams.update({"image_arch": args.image_arch, "text_arch": args.text_arch, "dataset": args.dataset})
+
     wandb_logger = WandbLogger(project="lit-wandb")
     dm = SubpopDataModule(
         data_dir=args.data_dir,
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     num_workers = 4
     input_shape = (3, 224, 224,)
     num_labels = 2
-    num_attributes = 1
+    num_attributes = 6
     data_type = 'images'
     dataset_len = 2
     group_sizes = [2, 1]
@@ -125,7 +125,6 @@ if __name__ == "__main__":
         devices=config.DEVICES,
         min_epochs=1,
         max_epochs=args.epochs,
-        precision=config.PRECISION,
         callbacks=[
             MyPrintingCallback(),
             ImagePredictionLogger(samples),

@@ -238,7 +238,7 @@ class MIMICNoFinding(BaseImageDataset):
         metadata = os.path.join(
             data_path,
             "MIMIC-CXR-JPG",
-            "physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta",
+            "subpop_bench_meta",
             "metadata_no_finding.csv",
         )
         super().__init__(metadata, split, train_attr, subsample_type, duplicates)
@@ -293,7 +293,7 @@ class CXRMultisite(BaseImageDataset):
         metadata = os.path.join(
             data_path,
             "MIMIC-CXR-JPG",
-            "physionet.org/files/mimic-cxr-jpg/2.0.0/subpop_bench_meta",
+            "subpop_bench_meta",
             "metadata_multisite.csv",
         )
         super().__init__(metadata, split, train_attr, subsample_type, duplicates)
