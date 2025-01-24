@@ -139,6 +139,75 @@ class Algorithm(pl.LightningModule):
         return zip(idx_a, idx_samples)
 
 
+    def test_metrics(algorithm, loader, train_loader, device, thres=0.5):
+        
+        # Get train samples
+        train_targets, train_attributes, train_gs = get_samples(train_loader)
+
+        # preds: sigmoid output
+        targets, attributes, preds, gs = predict_on_set(algorithm, loader, device) # gs: group sensitive attribute: (target, attribute) pairing?
+        preds_rounded = preds >= thres if preds.squeeze().ndim == 1 else preds.argmax(1)
+        label_set = np.unique(targets) # set of labels: but why?
+
+        breakpoint()
+        # Calculate metrics
+        res = {}
+        res['per_attribute'] = {}
+        res['per_class'] = {} 
+        res['per_group'] = {}
+
+        ## Overall metrics
+        res['overall'] = {
+            **binary_metrics(targets, preds_rounded, label_set),
+            **prob_metrics(targets, preds, label_set)
+        }
+
+        ## Per attribute metrics
+        for a in np.unique(attributes):
+            mask = attributes == a
+            res['per_attribute'][str(a)] = {
+                **binary_metrics(targets[mask], preds_rounded[mask], label_set),
+                **prob_metrics(targets[mask], preds[mask], label_set)
+            }
+            train_mask = train_attributes == a
+            res['per_attribute'][str(a)]['train_n_samples'] = len(train_targets[train_mask])
+
+        ## Per class metrics
+        classes_report = classification_report(targets, preds_rounded, output_dict=True, zero_division=0.)
+        res['overall']['macro_avg'] = classes_report['macro avg']
+        res['overall']['weighted_avg'] = classes_report['weighted avg']
+        for y in np.unique(targets):
+            res['per_class'][str(y)] = classes_report[str(y)]
+
+        for c in np.unique(targets):
+            mask = targets == c
+            res['per_class'][f'class_{str(c)}'] = {
+                **binary_metrics(targets[mask], preds_rounded[mask], label_set),
+                **attribute_metrics(targets[mask], preds[mask], label_set)
+            }
+            train_mask = train_targets == c
+            res['per_class'][f'class_{str(c)}']['train_n_samples'] = len(train_targets[train_mask])
+
+        ## Per group metrics
+        for g in np.unique(gs):
+            mask = gs == g
+            res['per_group'][str(g)] = {
+                **binary_metrics(targets[mask], preds_rounded[mask], label_set),
+                **attribute_metrics(targets[mask], preds[mask], label_set)
+            }
+            train_mask = train_gs == g
+            res['per_group'][str(g)]['train_n_samples'] = len(train_targets[train_mask])
+
+
+        res['adjusted_accuracy'] = sum([res['per_group'][str(g)]['accuracy'] for g in np.unique(gs)]) / len(np.unique(gs))
+        res['min_attr']  = pd.DataFrame(res['per_attribute']).min(axis=1).to_dict()
+        res['max_attr']  = pd.DataFrame(res['per_attribute']).max(axis=1).to_dict()
+        res['min_group'] = pd.DataFrame(res['per_group']).min(axis=1).to_dict()
+        res['max_group'] = pd.DataFrame(res['per_group']).max(axis=1).to_dict()
+
+        return res
+
+
 
 class ERM(Algorithm):
     """Empirical Risk Minimization (ERM)"""
