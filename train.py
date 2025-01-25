@@ -11,7 +11,7 @@ from callbacks import MyPrintingCallback, ImagePredictionLogger, EarlyStopping
 import hparams_registry
 
 os.environ["WANDB_API_KEY"] = "7a9cbed74d12db3de9cef466bb7b7cf08bdf1ea4"
-os.environ["WANDB_MODE"] = "offline"
+os.environ["WANDB_MODE"] = "online"
 
 
 if __name__ == "__main__":
@@ -25,12 +25,12 @@ if __name__ == "__main__":
     parser.add_argument("--train_attr", type=str, default="yes", choices=["yes", "no"])
     # others
     parser.add_argument(
-        "--data_dir", type=str, default="/home/aamer98/scratch/data/subpopbench"
+        "--data_dir", type=str, default="/home/as26840@ens.ad.etsmtl.ca/data/subpopbench"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/home/aamer98/projects/def-ebrahimi/aamer98/repos/Med_Unc/logs",
+        default="/home/as26840@ens.ad.etsmtl.ca/repos/Med_Unc/logs",
     )
     parser.add_argument("--exp_name", type=str, default="test")
     parser.add_argument("--seed", type=int, default=0, help="Seed for everything else")
