@@ -4,3 +4,885 @@ logs/
 lit-wandb/
 
 run_scripts.py
+
+\documentclass{article}
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2024
+
+
+% ready for submission
+\usepackage{neurips_2024}
+
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2024}
+
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2024}
+
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips_2024}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+
+\usepackage{multirow}
+\usepackage{amssymb} % for the checkmark
+
+
+\title{Reparameterizing Pre-trained Language Models for Robust Structural Pruning}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+
+\author{%
+  David S.~Hippocampus\thanks{Use footnote for providing further information
+    about author (webpage, alternative address)---\emph{not} for acknowledging
+    funding agencies.} \\
+  Department of Computer Science\\
+  Cranberry-Lemon University\\
+  Pittsburgh, PA 15213 \\
+  \texttt{hippo@cs.cranberry-lemon.edu} \\
+  % examples of more authors
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \AND
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+  % \And
+  % Coauthor \\
+  % Affiliation \\
+  % Address \\
+  % \texttt{email} \\
+}
+
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+Models are very large and expensive to run. Much work has been done to procedurally reduce the computational cost of LLMs whilst maintaining performance. In this work, we focus on structured pruning via dropping layers. Many recent works show the presence of redundancy in LLMs. Recent works show some of this redundancy can be detected by static metrics such as angular cosine distance which captures the hidden state drift. Other works use learnable modules to detect where this redundancy will cause least damage to downstream performance. Some works use model confidence as a proxy for task difficulty and use it as an indicator of the ideal pruning regime. Although these 
+
+
+Does the importance of layers vary based on the domain pertaining to the task.
+
+\end{abstract}
+
+
+\section{Conference deadlines}
+
+\begin{itemize}
+    \item EMNLP: May 19 2025  	
+    \item NeurIPS: May 15, 2025
+\end{itemize}
+
+\section{Topics}
+
+\begin{itemize}
+    \item Adaptive layer pruning
+    \item Prune weakest and KD
+    \item Layer drop and reparametrize while post training
+\end{itemize}
+
+\section{Motivation}
+
+Dynamic layer pruning: an adpative algorithm which is able to determine the optimal pruning configuration given a task pertaining to a particular distribution and difficulty.
+
+Existing work provides a lack of clarity on how layer importance varies for different tasks.
+
+
+\textbf{Story directions}
+
+\begin{itemize}
+    \item Write the characteristics that would be ideal for a pruning.
+    \item Then gradually introduce each of the components of the method, satisfying that characteristic, and then build from there.
+    \item \cite{siddiqui2024deeper} showed emulated update works well. The lora adapters would essentially learn what those emulated updates should be. but the risk here is that it would be prone to overfitting. Similarly \cite{gromov2025the} showed cosine similarity acts as a predictor for layer redundancy. Looking at the difference between shapely, which could be considered as an upper bound, and cosine distance, it is not necessary that cosine distance is necessarily providing the optimal path through the transformer to maximize performance and minimize compute costs. But, \cite{siddiqui2024deeper} showed that shapely doesnt generalize well. So maybe cosine distance is better overall. See if you can twist this into a motivation anyway though.
+    \item Motivation of using layer drop: Both reduces post-training time while improving inference performance upon layer pruning, while acting as a regularizer (but this needs to be shown empirically).
+\end{itemize}
+
+\textbf{Direction changes to consider}
+
+\begin{itemize}
+    \item Replace LoRA for lightweight layer since Chen et al. (2025) \cite{chen2025streamlining} showed that linear layers hold performance much better upon pruning.
+    \item 
+\end{itemize}
+
+\section{Introduction}
+
+\textcolor{red}{It is commonly believed that human cognition (Stanovich and West, 2000; Levy, 2008) uses varying cognitive efforts to operate and learn depending on the ‘hardness’ of the input. Specifically, one may only need small efforts (lower computational cost) to process ‘easy’ examples, like the commonly used stop-words, punctuation, patches in the background of an image, etc., but allow additional efforts (more computational cost) for ‘hard’ examples, e.g., a rare abstract concept for reasoning, when they are truly needed. Therefore, allocating the same computational power of a large model uniformly for processing all samples tend to be wasteful and less efficient.}
+
+\textcolor{red}{Overparameterized transformer networks have obtained state of the art results in various natural language processing tasks, such as machine translation, language modeling, and question answering. These models contain hundreds of millions of parameters, necessitating a large amount of computation and making them prone to overfitting. \citep{Fan2020Reducing}}
+
+Much work has been done on unstructured pruning, head pruning. Recently more works have looked into layer pruning, other works look into token-level layer pruning, but this still constitutes a smaller portion of approaches focusing on reducing the number of layers. Many recent works look follow the approach of static pruning approaches where they determine the relevance of a layer by measuring the angular distance between a layer's input and output. The intuition here is that, the lesser the transformations brought about to the hidden state by a layer, the less impact that layer will have on model performance. Recent works have shown that a significant portion of the layers of modern LLMs can be pruned without too much loss in performance due to the slowly changing nature of embeddings across layers, which hypothesized to occur due to the presence of residual skip connections (dejavu).
+
+
+Ideal characteristics for model sparsity methods \citep{pmlrliu23am}:
+\begin{itemize}
+  \item Should not require retraining.
+  \item Preserve quality.
+  \item Lead to measurable inference speedups.
+\end{itemize}
+
+
+
+While different kinds of pruning methods do enable for more efficiency without too much degradation in performance, the amount of performance degradation is task-dependent. Deja uses contextual (or task specific) information to determine what to prune. Rather, it DejaVu uses an algorithm which takes a look at each layer's inputs to see what to prune.
+
+
+Unstructured sparsity generally doesn't bring speed ups unless it's highly sparse. Some form of structured sparsity like block pruning will be more useful towards clock time speedups.
+
+Possible experiments to run:
+
+\begin{itemize}
+  \item See the effects of different pruning methods across different tasks.
+  \item Maybe look into a fairtune like method for task specific pruning.
+  \item Benefit of the static mask approach as opposed the dynamic sample specific approach: In the dynamic approach, the full model always needs to be loaded onto the GPU.
+\end{itemize}
+
+Goal: Minimize difference between sparse computation and full computation.
+
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{lccccccccc}
+        \toprule
+        \multirow{2}{*}{Method} & \multirow{2}{*}{Sparsity} & \multirow{2}{*}{Latency} & \multicolumn{2}{c}{LLAMA} & \multicolumn{3}{c}{LLAMA-2} \\ \cmidrule(lr){4-5} \cmidrule(lr){8-10}
+        &  &  & 7B & 13B & 7B & 13B &  &  & 70B \\ \midrule
+        Dense & - & 0\% & 5.68 & 5.09 & 4.77 & 3.56 & 5.12 & 4.57 & 3.12 \\
+        Magnitude &  & 50\% & 17.29 & 20.21 & 7.54 & 5.90 & 14.89 & 6.37 & 4.98 \\
+        Wanda &  & 50\% & 7.26 & \textbf{6.15} & \textbf{5.24} & 4.57 & \textbf{6.42} & 5.56 & 3.98 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Performance comparison for different methods on LLAMA and LLAMA-2 models.}
+    \label{tab:llama}
+\end{table}
+
+
+\section{Methods}
+
+
+\subsection{Possible Layer Importance Mechanism}
+
+\textcolor{blue}{Add an LM head in the prior layer to determine whether to skip the next layer.}
+
+A dedicated early exit decode head for each layer \cite{elbayad2020depthadaptivetransformer}. They explored early exit granularities per token and per sequence, and both statically and dynamically via auxiliary layers that learned during training when to exit.
+
+Use Speculative Decoding \cite{leviathan2023fastinferencetransformersspeculative,chen2023acceleratinglargelanguagemodel,Zhang_2024,hooper2024speedspeculativepipelinedexecution} to process a group of tokens to determine whether to skip the proceeding layer. \textcolor{red}{Can it process all the tokens at once?}
+
+
+
+
+
+
+\subsection{Evaluation Metrics}
+
+\textbf{Perplexity}
+
+\textbf{Accuracy}
+
+\textbf{Rouge Score}
+
+
+
+\subsection{Post-Training}
+
+\textbf{}
+
+
+\section{Related Works}
+
+\subsection{Unstructured Pruning}
+
+It is difficult to achieve wall clock speedup times during inference with unstructured sparsity.
+
+
+\subsection{Depth-Adaptive Transformer}
+
+This method determines how much computational capacity should be used for each sample, to ensure a certain level of performance \textcolor{purple}{Would be a useful mode to have in our static pruning method}. 
+
+
+This method is built on the notion that large models are required to do better on hard examples, small models are likely to perform as well on easy ones, e.g., the aforementioned ensemble is probably not required to translate a short phrase such as "Thank you". However, current models apply the same amount of computation regardless of whether the input is easy or hard. \textcolor{purple}{But is it really so that a higher pruning percent will lead more performance degredation on harder samples than easier samples? These works determine the difficulty of a sample using uncertainty. This is however an unreliable way to track sample difficulty due to the potential of model over or under-confidence. Recent works have introduced benchmarks such as E2H, where the difficulty of each sample directly accompanies each sample from the data-loader. This would be a novel form of analysis on the effect of pruning ratios on downstream performance based on task difficulty.}
+
+
+They carry out dynamic layer selection on both an entire sequence level and token level basis. 
+
+
+Choosing a different output classifier at each block (anytime prediction) results in an exponential number of possible output classifier combinations in the sequence length.
+
+
+
+\subsection{LoRAPrune}
+
+This work aims to look into an iterative structured pruning approach (channel and head pruning) (\textcolor{purple}{In essence, our work is also an iterative structured pruning approach, where, due to layer dropout, random structures are pruned at each iteration. The difference here is that those pruned structures are restored following that training step, and another set of structures are pruned at the following iteration}). At this level of structured pruning, since the lora matrices are added over the entirety of the weights of the model, this renders the zero'd out structured set of weights useless. Additionally, unstructured sparse models are not compatible with lora. The task of separating tuning and pruning has been shown to produce suboptimal results \cite{molchanov2017pruning,sanh2020movementpruningadaptivesparsity} (\textcolor{purple}{Motivating our end-to-end solution. Moreover, our method bypasses the need complex solutions to adapt the low rank adapter as done in this method}). LoRAPrune is proposed as a unified solution for post-training and finetuning. However, LoRAPrune utilizes the moving average of the gradients of the lora modules to determine weight importance. This is a faster way than using the gradients of the full weights to determine structural importance.\textcolor{purple}{This is a more roundabout, expensive and difficult way to determine structural importance than having the model to learn directly in the post-training criterion as is done in our method.} Additionally, all of this is carried out using only a small calibration dataset. Their structured pruning approach matches other semi-structured pruning approaches (\textcolor{red}{do these approaches involve finetuning?}).
+
+
+Other importance measures: Importance calculated via Taylor expansion is very expensive. 
+
+\subsection{Row-based Sparse Finetuning}
+
+Use lora with sparse training. May be worth looking into: We propose two variants of the Taylor importance for different settings in image and language tasks: classaware Taylor and Zeroth-Order Taylor. The first one is designed for tasks where class-wise accuracy is important (in addition to overall accuracy), such as image classification. Zeroth-Order Taylor is designed for large language models and requires memory only equal to that of a forward pass. In addition, we show how to effectively reduce the estimation variance of the Zeroth-Order estimator. Look into the loss function term used to induce sparsity here.
+
+
+\subsection{Elastiformer}
+
+Dynamic token routing but doesnt require extensive retraining like MoD. Self-distillation (SD) is a sub-class of KD, where the student and teacher models are the same architecture. In many cases, the SD aims to distill knowledge learned in deeper layers to shallow layers in the same model, which has shown to reduce overfitting, improve domain generalization, and embed semantic information that is not commonly seen in non-SD models.
+
+we compute KL-divergence between the student model’s output probability pstudent and the teacher model’s output probability pteacher
+
+Look into the distillation loss used in this paper
+
+\subsection{Adaptive Sparse Training \cite{huang2025pruning}}
+
+Tailored for semi-structured (2:4) sparse models.
+KD improves retraining efficiency and enhances model performance. They note that both the mask and weights need to be trained for optimal performance. Adaptive Sparse Trainer, applies sparsity to unimportant weights, while adhering the guard rails for n:m sparsity. They introduce a gradual decay scheduler (Annealing SR-STE): to accelerate convergence and improve performance. Initialization plays a role. Negligible drop in PPL and accuracy in zero-shot tasks. Training free methods usually fall short on zero-shot performance (\textcolor{purple}{check for cosine similarity performance on llm harness zero shot}). They further combine their semi-structured pruning method with AWQ.
+
+
+Very similar in spirit to our paper: simultaneously trains the lora adapters and the remaining pruned weights. However, they incorporate lora after pruning. While our method does it on the fly (a big difference and a more end-to-end solution).
+
+
+Sparse Training: mask training purely with cross entropy loss can result in discarding or loss of significant information from the pruned weights. This would be prevented with a KD loss. Solely using language modelling during retraining also brings up the risk of the sparse model being trapped in a local minima. A KD loss helps guide the model towards the local optimum. Their sparse training method maintains all model weights (frozen?), and gradually decreases non-essential weights to zero. \textcolor{purple}{Should have a sort of motivation for loss on the layer-based sparse training of our method.}
+
+
+Look into the following sparse loss. (However, selecting the appropriate decay strength is challenging. If the decay signal is too strong, masked weights will struggle to regenerate, leading to an almost fixed mask. On the other hand, if the decay signal is too weak, the model will fail to filter out important weights, resulting in heavy oscillation that hinders model convergence. To address this dilemma between stability and exploration, we propose adding a moving decay schedule, with weaker decay strength at the beginning to encourage the model to explore various connectivity patterns and a stronger decay signal toward the end to facilitate model convergence.)
+
+
+Significant improvement in convergence when using kd loss. When retraining a pruned model,  the initialization from the pre-trained model can result in the model being trapped in a local minima during retraining. They hypothesize that this may be due to overfitting. This local minima dilemma is prevalent in smaller models. So the kd loss is weighted higher in these models. They claim that intermediate KD hinders model’s ability to generalize.
+
+
+May be worth looking into their sparse low rank boosting (SLoRB). using intermediate information during the distillation of generative language models is detrimental, and that KL loss is sufficient for optimal performance.
+
+
+
+\subsection{RoSA}
+
+They propose to combine sparse training with LoRA, since dense finetuning computationally expensive. They claim that RoSA outperforms LoRA and vanilla sparse training. In certain cases, RoSA matches performance of FFT (dense finetuning). They claim that LoRA fails to recover performance on harder finetuning tasks relative to FFT, and this is particularly relevant on harder fine-tuning tasks. RoSA (Robust Adaptation): Similar computational and memory cost relative to LoRA, while being more performant. They do a low-rank + sparse matrix finetuning, inspired by PCA, where the motivation is that matrices arising from noisy measurements (tough problems) can be approximated as a sum of a low-rank component and a sparse one. They use some sort of l0 norm on the sparse mask while finetuning.
+
+\subsection{Sparse Finetuning}
+
+Previous works \cite{sanh2020movementpruningadaptivesparsity} have applied high levels of weight sparsity when finetuning BERT models, where the pretrained model is adapted to a "downstream" task such as question answering or text classification.
+
+The following work by Kutic et al. \cite{kurtic2023sparsefinetuninginferenceacceleration} aims to study efficient sparse fine-tuning on LLMs.
+
+They summarize their work as follows:
+
+\begin{itemize}
+    \item Naive sparse fine-tuning, dense fine-tuning while gradually imposing sparsity, causes instability in training. Manifesting itself as 1) loss spikes at higher sparsity values, leading to divergence, 2) dense fine-tuning on small amount of fine-tuning data available for a particular sub-tasks \textcolor{purple}{motivating the use of broader post-training datasets}, 3) overfitting due to dense finetuning on limited data.
+    \item This work proposes to first obtain a pruned model using SparseGPT. The sparse finetuning is done by incoorporating the standard cross-entropy loss, output knowledge distillation, and a type of per-token $l_{2}$ knowledge distillation.
+    \item They obtain inference speed up via n:m sparse format.
+\end{itemize}
+
+
+\subsubsection{Methodology}
+
+\textbf{Sparse Fine-tuning}
+
+This work follows the paradigm of iterative pruning (with sparse gpt) and finetuning, gradually increasing sparsity levels.
+
+\textbf{Distillation Strategies}
+
+Dense sparse fine-tuning of LLMs is shown to be notoriously difficult. To stabilise this training, KD is used to enable the pruned model to mimic the full teacher model. The most common KD strat is to add a loss term to KL divergence between student and teacher outputs. This work obtains better results by distilling intermediate representations \textcolor{purple}{Does it make sense to distill only the intermediate representation, prior to the LM head, since it is the final LM head layer which makes the ultimate decision}. This work uses MSE loss between intermediate representations (they call this SquareHead). They add a normalization term to stabilize training, as the magnitude of activations may vary significantly across layers. They discard terms corresponding to padding tokens. They advocate this loss as it is consistently performant. 
+
+\textbf{Inference Speedup}
+
+It is difficult to obtain wall-clock speed up using unstructured sparsity methods. They use uniform sparsity patterns such as n:m sparsity on compatible hardware to realize actual runtime speedup.
+
+
+\textbf{Takeaway from Results}
+
+Cross entropy and standard KD is unstable for full model sparse training, particularly at sparsity rates over 50\%. On generative tasks, they claim that sparse finetuning with squarehead loss at low sparsity levels leads to performance improvements. They show that the method works a bit differently at different bit precision (post-training quantization). \textcolor{purple}{It is worthwhile to run experiments with our method on models at different precision.}
+
+
+\subsection{LaCo: Layer Collapse}
+
+Not too relevant of a paper. Take a closer look at results to use as a baseline.
+
+
+\subsection{SLEB: Redundancy verification and block elimination}
+
+Prunes transformer block as the fundamental unit to be pruned. Dejavu is a dynamic pruning algorithm assesses whether to bypass certain segments of a layer operation, based on context of the input in single batch scenarios. Early exit dynamically determines whether to skip subsequent transformer blocks, which is usually determined when a model reaches a particular level of confidence. The problem with dynamic pruning is that it requires training to be effective. Early exit methods results in a significant decline in the linguistic capability of the LLMs, as measured by PPL. Shapely-PPL achieved best PPL, and they claim it also increases ppl as blocks are removed. \textcolor{red}{The concept of removing consecutive blocks from LLMs is not effective without dynamic decision-making and training.}
+
+\textbf{Limitations of Early Exit and Dynamic Methods}
+
+\begin{itemize}
+    \item \textit{Limited usage in batch settings}: in token-based dynamic pruning settings. Each sample and each token in a batch may require different optimal paths. This complicates implementation and diminishes efficiency benefits in multi-batch contexts.
+    \item \textit{Inability to reduce memory requirements}: In dynamic pruning methods, the entire model needs to be loaded onto memory.
+    \item \textit{Resource-intensive training}: Dynamic early exit methods typically will end up exiting at one of the final layers in LLMs. The LLM would also require some training process to adapt the LLM to the skip predictor.
+\end{itemize}
+
+
+\textbf{Strengths of SLEB \textcolor{purple}{Which align with ours}}
+
+\begin{itemize}
+    \item Inference speed up from structured pruning
+    \item Acceleration in multi-batch settings unlike dynamic methods
+    \item Reduction gpu memory requirements relative to dynamic methods
+\end{itemize}
+
+
+\subsubsection{Method}
+
+Cosine Similarity: Measure distance between input-outputs on a token level (should check out code). 
+
+\textcolor{red}{These results reveal that, although the similarity between transformer blocks that are further apart varies across the LLM architecture, there is a consistently high degree of similarity between neighboring transformer blocks. This insight underscores the potential redundancy within these models and highlights areas where efficiency could be enhanced through strategic block elimination.  Indeed, this observation emphasizes a fundamental misalignment between existing early exit methods and the nature of LLMs. The primary limitation of early exit methods is their tendency to skip a continuous sequence of transformer blocks. This approach does not take into account the high degree of output similarity between adjacent transformer blocks, as indicated by our cosine similarity measurements. Consequently, such strategies risk bypassing blocks that are essential for preserving the linguistic integrity of the LLMs.}
+
+Metric 1: Cosine distance
+
+Metric 2: Shapely-PPL
+
+The removal of a continuous sequence of blocks has a more significant impact on performance.
+
+
+Broad Methodology: Measure cosine distance. Remove block. Recalculate consine distance. Remove block.
+
+
+
+
+\subsection{LLM-Streamline}
+
+This work proposes a method to replace redundant layers (as determined by cosine similarity). They use a lightweight feedforward network as a replacement and is trained by taking the MSE between the output of the layer to be replaced and the lgihtweight fully connected layer. This work involves removing \textit{consecutive layers} \textbf{\textcolor{purple}{This is a deviation from our work where the model hints at which layers are more or less important via L1 norm, offering a more dynamic(?) path. Though the direction of pruning consecutive layers is much easier since you can insert a single module as a replacement. Though maybe with layer dropout, lora reparameterizes the layers such that this is not a problem. But the main question is, is the representation power and capacity of LoRa enough to make up for the hidden state drift arising from pruned layers. Maybe it is worthwhile attaching a lightweight linear layer after or before each layer, and to play around with whether this linear should or should be dropped. Unlike LLM-Streamline, which divides the task of layer selection and layer replacement, our solution would be combine these process into one end-to-end layer pruning and replacement/healing solution. It needs to work better, then we call on the motivation end-to-end deep learning solutions always being the ultimate and best performing and widely used methodologies. And this can inspire further research in this direction.}} 
+
+
+Works well and makes sense if irrelevant layers are consecutive. Since it replaces a blocks of layers. The loss is mse. Doesnt it make more sense to use KL? What is the relevance of Swiglu. Cosine works well because it is agnostic to magnitude of vectors.
+
+Rationale of replacing layers with light weight mlp: the transformations carried out by layers indicated by cosine as low, can be captured by low capacity networks.
+
+Rationale for MLP over LoRA: 
+1. Finetuning the model using PEFT requires storing of the weights, activation values and optimizer state of the PEFT  module, but this is not that expensive no?
+
+2. Layer replacement involves 2 stages. Dataset construction and model training. The dataset here are the input-output embeddings of the selected consecutive blocks. So no training with the big model. Just storing the model weights and activation values.. Soo it doesnt involve storing the activation state (for gradients) and optimizer state. The second stage involves storing lightweight network’s weight, activation values and optimizer state. This ends up being cheaper
+
+Other Notes: They speculate that LoRA is a process of redistributing the function of the pruned layer across the other layers (which they say is a harder task). But it doesn’t tho, it redistributes it along the lora modules. While their layer replacement strategy follows straightforward knowledge distillation. 
+
+
+Evaluation Metrics:
+They say the problem with accuracy is that they measure for answer correctness, which the model can get correct even if the confidence of the model is way off. They want to measure for consistency.
+Additionally they also show results as a function of maintained performance.
+
+Process of MCQ eval: . The input to the classification task consists of a question accompanied by multiple choices, and the LLM is required to select the correct answer from these choices. Typically, each choice is concatenated with the question to form multiple sentences, and the perplexity (PPL) of each sentence is computed. The choice corresponding to the sentence with the lowest PPL is selected as the answer. 
+
+They note that on certain MCQ benchmarks, the performance improves as pruning occurs. From analysis on the confusion matrix, they observe that confidence of the pruned model is significantly worse, and the accuracy overestimates the performance of the model. Their proposed stability metric checks for consistency of model confidence before and after pruning.
+
+Calibration set: SlimPajama - data from different domains. 30000 sequences.
+
+Results: Their method performs better on accuracy. And performs better by an even bigger margin on the consistency metric. Even outperorming certain structured pruning methods that prune more fine-grained structures.
+
+This paper emphasizes maintaining the soundness of the hidden state. Which is the same motivation for our work.
+
+The FFN works better than a transformer layer as a replacement layer. Atleast , the FFN layer converges faster than the transformer layer.
+
+FFN vs LoRA: They use a rank of 128 on LoRA, to match the parameters of FFN. FFN performs better, while needing less compute. BUT NOT BY MUCH. Limited running.
+
+Other notable results: 
+shapely (PPL) overfits more than cosine.
+Scaling post-training dataset from 30000 to 6B improves performance slightly but at 100x the cost.
+
+What about results at higher sparsity: They dont go above 25%
+
+Very similar in spirit. Very important baseline.
+
+
+
+\textcolor{red}{The core idea of layer pruning is to identify and remove less important layers in an LLM. Specifically, the effect of each layer can be viewed as a transformation of the hidden states. If the input and output hidden states of a particular layer are highly similar, such as exhibiting high cosine similarity, we can say that the layer has a small impact on adjusting the hidden states. As illustrated in Fig. 2, our pilot study shows that certain contiguous layers indeed have smaller impact on the hidden states, indicating they are less important and suitable for pruning. Some concurrent works (Song et al., 2024; Kim et al., 2024; Yang et al., 2024; Men et al., 2024; Gromov et al., 2024) also explore layer pruning. These studies either prune unimportant layers directly without further training (Song et al., 2024; Men et al., 2024) or fine-tune the pruned model to enhance performance (Kim et al., 2024; Yang et al., 2024; Gromov et al., 2024). Directly removing layers can lead to more performance degradation. While parameter-efficient fine-tuning techniques like LoRA (Hu et al., 2021) are used to train the pruned LLM, fine-tuning the model to make the original non-contiguous layers compensate for the performance degradation is not an easy task (details in Section 2.3).}
+
+
+\subsection{LLM-Streamline}
+
+Noteworthy Idea: dynamic batch loading, which dynamically updates the composition of sampled data in each training batch based on varying losses across different domains.
+
+A lot of data related ideas that are very much worth looking into
+
+Using pruned pre-trained LLMS as started models
+
+Check out the l0 norm loss
+
+\subsection{Nvidia Prune and Distill}
+
+Owing to their enormous size, computing gradient information on modern LLMs is prohibitively memory and compute-intensive, and one of our primary goals is to avoid this expensive step when trying to obtain importance information. In this paper, we propose a purely activation-based importance estimation strategy that simultaneously computes sensitivity information for all the axes we consider (depth, neuron, head, and embedding channel) using a small (1024 samples) calibration dataset and only forward propagation passes. We now describe how this strategy is implemented for each individual axis.
+
+
+Iterative cosine distance prune and distill. Calibration set of size 1024
+
+Logit distillation when fewer layers are pruned. Logit-based KD loss across the sequence of all output tokens
+
+Iterative Importance: in this setting, we iteratively alternate between pruning and importance estimation for a given axis or combination of axes. Makes sense because once layers are pruned, the flow of the hidden state will change. Doesnt do any better
+
+KD: train small model to mimic outputs or hidden states. The mismatch in student and teacher hidden states is handled by learning a shared linear transformation during distillation to upscale the student hidden state to the teacher hidden state dimension. The hidden states used are always post LayerNorm.
+
+KD dataset: Unless otherwise specified, we use 1.8 billion tokens (400 steps) from nemotron for lightweight retraining.
+
+We use the Nemotron-4 curated 8 trillion token (8T) base pretraining dataset and the continued training dataset (CT) [42, 44, 43]. We use the 8T training blend for all our ablations and use a combination of both data blends to retrain our final models.
+
+6. Use (logit+intermediate state+embedding) distillation when depth is reduced significantly. 7. Use logit-only distillation when depth isn’t reduced significantly. Does using the first one during sparse training mean that itll will lose less performance at higher sparsities.
+
+9. Perform lightweight retraining to stabilize the rankings of searched pruned candidates. - some sort of healing
+
+Takeaways
+1. training one single big model, and obtaining smaller ones from it through pruning + retraining achieves higher accuracy and is extremely cost/compute-efficient when compared to training them from scratch. Further, our efficient retraining strategy also eliminates the need to curate trillions of tokens of data.
+
+Loss function: Choice of Loss Function: we experiment with Kullback-Leibler divergence (KLD), MSE, cosine similarity and reverse KLD (R-KLD) to compute Llogits. Recent work has shown R-KLD [15, 27] to be a better fit than KLD in the SFT/instruction-following setting, and Agarwal et al. [2] claim the choice of loss is task-dependent. We observe from Table 15 and 16 that KLD is the best choice for pruned base model training.
+
+Choice of Losses: typically, a weighted combination of LCLM and Llogits is used for distillation. We find that using Llogits alone results in the best performance as shown in Table 15. For $Lis = Lemb + Latt + Li + Lo$ , we make several observations similar to Lu et al. [31]; these are listed in Appendix A.4 and in Table 17. Most notably, we observe no improvements from using Lis when retraining models that don’t prune the depth axis significantly, such as MINITRON 8B and MINITRON 4B and hence use Llogits alone in such cases
+
+We hypothesize that aggressive one-shot pruning loses out on important capabilities of the base LLM. We thus explore a simple iterative two-step pruning and retraining strategy where we first prune and retrain Nemotron-4 15B to create MINITRON 8B (46\% reduction) and further prune and retrain the latter to MINITRON 4B (50\% reduction).  – Dropout plus kd is essentially an iterative prune and training solution – but it is an end to end sparse training solution for robust layer pruning
+
+\subsection{Dynamic Routing / Contextual Sparsity}
+
+A router (can be some form of linear layer) which dynamically decides the computational path based on the input. This method follows the intuition that different inputs require varying computational demands.
+
+\subsubsection{DejaVu}
+Contextual sparsity refers to a smaller subset of the model which is chosen in an input-dependent manner, that yeilds approximately the same output as the dense model \citep{pmlrliu23am}. Given inputs to each layer, DejaVu \citep{pmlrliu23am} predicts sparsity of the proceeding layer on the fly with negligible drop in performance while speeding up inference times. According to Liu et al. \citep{pmlrliu23am}, contextual sparsity can be predicted \textbf{only} with sufficient information from token embeddings. Additionally, contextual sparsity can be predicted based on the \textbf{similarity} between layer parameters (heads/MLPs) and the input tokens to that particular layer. DejaVu \citep{pmlrliu23am} uses a \textit{asynchronous} lookahead predictor to predict where the contextual sparsity lies for the proceeding layer. Particularly, given the input to a layer, DejaVu predicts the relevant attention heads and MLP parameters and only loads these parameters for computation. To achieve wall-clock speed up times, they implement a \textcolor{red}{hard-aware sparse matrix multiply} using CUDA kernel programming. 
+
+DejaVu: Finding contextual sparsity. Two forward passes.
+\begin{itemize}
+    \item{First forward pass: see which heads and parameters yield high output norms.}
+    \item{Second forward pass: Use only these parameters.}
+    \item{Both forward passes yield similar results. Their results show that upto 80\% of attention heads and 95\% MLP parameters can be removed.}
+    \item{DejaVu: aims to predict where this sparsity lies.}
+    \item{DejaVu: A similarity-based prediction algorithm.}
+\end{itemize}
+
+DejaVu: Other observations:
+\begin{itemize}
+    \item{Residuals have high norms. They hypothesize this is due to the presence of high sparsity.}
+    \item{\textcolor{blue}{My take: This could also the other way around. The model somehow learned to concentrate a lot of the important processing towards the start of the neural network. This was enabled due to the residual connections present in the model which pass along the information via skip connections.}}
+\end{itemize}
+
+\textbf{Contextual Sparsity in MLP blocks}
+
+Contextual sparsity can be accurately computed from the output activation of the layer. The challenge is to bring actual efficiency and predict where this sparsity is likely to occur. The prediction method needs to be \textit{fast} and \textit{precise}. For each MLP block, they use a small 2 layer MLP block to predict contextual sparsity, that is, it predicts a set of important neurons.
+
+\textbf{Contextual Sparsity in Attention Blocks}
+
+Only a few attention heads perform important computations. One challenge of sparse prediction in attention blocks is the attention layer's dependence on previous tokens. It is not clear if the previous token's key and value is needed for sparse prediction. It is also not straightfoward on how to handle missing KV cache of past tokens for current token computation.
+
+\textbf{Asynchronous Execution}
+
+So now, there are two additional layers before every existing MLP and MHSA layer. These additional layers can easily diminish any gains made by the predicted pruning method. To prevent this overhead, they use an asynchronous implementation method. So basically, since the embeddings of the layer change very slowly, you are able to use the input of the previous layer to predict the sparsity in the next layer. Essentially, this allows the sparsity prediction MLP and the transformer layers to be computed in parallel, preventing any inference time overhead. But it certainly does involve the use of additional computation, which they argue, just results in better and more complete utilization of hardware. 
+
+\textbf{Hardware-efficient Implementation}
+
+In essence, DejaVu is an unstructured pruning method. It uses cuda kernel optimization tricks using Triton code to bring actual speed up from this unstructured sparsity.
+
+
+\subsection{SkipLayer}
+
+This paper argues that a variable amount of computation should be allocated on a per-token basis. A binary router is used to predict whether a layer should be skipped. 
+
+\subsubsection{Router Function}
+The router function is trained to assign only a subset of the inputs to the proceeding layer to maximize performance according to a specified budget. The router outputs a binary mask matrix. The router takes as input the batch of input sequences of shape $BxTxN$ where $B$ is the batch size, $T$ is the sequence length, and $N$ is the embedding size. The router outputs a binary mask of shape $BxT$, indicating which tokens should be selected. Several design choices can be token for the router.
+
+\textbf{Design option 1: Sigmoid:} One of the design choices that can be taken for the router is using the sigmoid activation function, which bounds the output to a value between zero and one, and is easily differentiable. The paper says an additional decision rule is needed to find a threshold
+
+\textbf{uDesign option 2: Top 1:} A top-1 implementation, that is, two values are output by the router for each token. The two values indicate the scores for whether the token should or should not be selected, and then the argmax (Top-1) of the scores are taken to decide whether to skip or not. However, these hard probabilities are not differntiable. To overcome this problem, previous works soften the scores via blending. This allows gradients to flow while learning. This did not work well because, it didn't enable for the precise control of sparsity, that is, the softening of the scores meant that the tokens were being weighted by a small value and being passed through rather than being completely negated.
+
+\textbf{Design option 3: Straight-Through Gumbel-Softmax:} Basically, it just uses the hard scores during forward propagation and uses the soft scores during backprop while computing gradients.
+
+
+\subsubsection{Router Training}
+The training of the router function is similar to the L1 loss of ViT-Slimming. Basically, a budget is specified prior to training, and then a regularization term is added to the NLL loss to train the model to reach the desired sparsity level.
+
+\subsubsection{Implementation Details}
+The amount of tokens skipped at each layer varies, making it a flexible design. However, this can lead to inefficiencies as having varying amount of computation at different layers is an inefficient way to use the GPU. Current hardware prefer fixed and predictable workloads. \textcolor{red}{TODO: Understand efficient implementation} There is some sort of efficient mechanism to grap the non skipped tokens and only perform computation on them. The skipped tokens are completely ignored.
+
+This work considers a layer as including both self attention layer and the feedforward, so it does block skipping rather than individual layer skipping.
+
+\subsubsection{Dealing with KV-cache Issues} It only skips computation of queries on skipped tokens but still computes K and V, in order to retain context for the tokens which are not skipped.
+
+\subsubsection{Experimental Setup} Involves training the model from scratch. They measure performance 
+
+
+\subsection{Mila Layer Skipping}
+
+One effective approach is dynamic inference, which adapts the architecture to the sample-at-hand to reduce the overall computational cost. We find that a pre-trained decoder-only model is significantly more robust to layer removal via layer skipping, as opposed to early exit.
+
+They state that layer skipping on a per-token basis is difficult.
+
+They are achieving equal performance of original model using only 23.3\% of layers on average.
+
+
+\textbf{Considerations for layer skipping in autoregressive models}
+
+\begin{itemize}
+    \item{Generation output is sensitive to errors introduced upon reducing computation for a single token.}
+    \item{Evaluating layer-level classification heads are costly.}
+    \item{Add routers at a token level adds overhead over autoregressive passes. So they need to be lightweight.}
+\end{itemize}
+
+Token level vs non-token level layer skipping.
+
+Pruning should be optimized to preserve embedding space as much as possible. Or it should be optimized to improve/maintain/respond to the uncertainty in the model. The drift of the embedding space needs to be mitigated as the embeddings are removed.
+
+This work measures preservation using cosine similarity.
+
+Static Baselines:
+\begin{itemize}
+    \item{Random layer skipping at every batch.}
+    \item{Uniformly skipping layers at even spaces.}
+    \item{Early exit: Compute the layers sequentially according to a specified budget.}
+\end{itemize}
+
+Results:
+\begin{itemize}
+    \item{They compare the cosine similarity of the hidden state before and after pruning as a metric for hidden state preservation.}
+    \item{}
+    \item{}
+\end{itemize}
+
+\subsubsection{Problem Setting}
+We consider the problem of auto-regressive language generation using a neural network, denoted by \( T(\cdot) = d_L \circ \cdots \circ d_1 \circ e(\cdot) \), and consisting of stacked decoder blocks \( d_l \) and an embedding layer \( e \). For NLG, we augment \( T \) with a classification head \( \sigma \). Consider an input sequence \( s_t = [x_{1:p}, y_{1:t}] \) consisting of the concatenation of a prompt \( x_{1:p} \) and a sequence of generated tokens \( y_{1:t} \) where \( x_k, y_k \in Y \), with \( Y \) denoting the vocabulary space. Sequences are generated auto-regressively by sampling the next token \( \hat{y}_{t+1} \) from the predicted probability distribution \( \hat{p}_{t+1} = \sigma(T(s_t)) \). In the field of efficient dynamic inference, the early exit method dynamically selects an exit layer \( L_E \), and executes layers \( \{d_l\}_{l \leq L_E} \). Thus, the network can be written as \( T_{EE}(\cdot) = d_{L_E} \circ \cdots \circ d_1 \circ e(\cdot) \). For layer skipping, the execution of each layer \( d_l \) is controlled by a binary variable \( G_l \), where \( G_l = 1 \) denotes executing layer \( l \). The layer skipping model output is then defined as \( T_{LS}(\cdot) = G_L d_L + (1 - G_L)I \circ \cdots \circ G_1 d_1 + (1 - G_1)I \circ e(\cdot) \), where \( I \) is the identity function. For each case, we define the computational cost \( c \) as the number of decoder layers executed, omitting the fixed costs of the embedding layer \( e(\cdot) \) and classification head \( \sigma(\cdot) \). For early exiting, \( c = L_E \), while \( c = \sum_{l=1}^{L} G_l \) for layer skipping. For all experiments, we only consider the computation performed on the autoregressively generated tokens \( y_{1:T} \), as is commonly done. The prompt is propagated through the full network since the prompt tokens can be efficiently processed once and in parallel and provide important context for NLG.
+
+
+\subsection{Performance Control Early-Exiting}
+
+Early exiting: if the model is confident at early layers, you exit at early layers. 
+
+
+\textbf{Their selling point:} Larger models pruned via their early exiting to smaller models performs better than smaller models which have been trained from scratch.
+
+Early exiting is an inference technique is an inference technique which allocates budget adaptively to test samples based on their perceived confidence (uncertainty at each layer).
+
+
+The most common approach of early exiting is to track the model confidence at early layers.
+
+\textbf{Performance control early exiting:} They introduce a post-hoc early exit approach to \textit{control accuracy} by having a classification head at every layer and returning confidence scores. They do not rely on a datapoints confidence. Rather, they use a calibration set and average the accuracies of samples with similar confidence levels, and perform accuracy thresholding. They collect a group of samples around a particular confidence level and compute the average accuracy on those samples. So, they have a mapping of what accuracies different ranges of model confidence will result in. They argue that accuracy is a better indicator of model performance than model confidence.
+
+\textbf{Driving motivation: }An adaptive pruning algorithm which is able to keep the size of smaller models while maintaining the cost of larger models. The method must be advantageous for both performance and computational cost.
+
+This provides better control over performance than confidence-based approaches.
+
+\textbf{Early exiting and related works: } An inference optimization technique which adaptively allocates budget to samples based on their perceived difficulty. Existing methods evaluate confidence of predictions at each layer and determine whether its okay for the model to exit. \textcolor{blue}{So I assume this means there is a classification head at each layer? Additionally, a possible drawback of this is that confidence is a tricky mechanism to handle, relying on other factors such as confidence.} So this means a pre-determined threshold level is set and when this threshold is statisfied, the model stops processing the hidden state via additional layers and exits.
+
+So they claim
+
+\textbf{Drawbacks}
+\begin{itemize}
+    \item{It is also important to note that temperature scaling requires additional training and hyperparameter tuning, while our approach offers a simpler alternative that does not necessitate any extra training and remains effective in mitigating overconfidence in models. As highlighted in the related work, model calibration could be a challenging task influenced by various architectural and hyperparameter factors, such as depth, width, and choice of optimizer. Check paper to find references.}
+    \item{This dependence on confidence makes the algorithm prone to setbacks from model over or under confidence.}
+    \item{Lack of extensive evaluation.}
+    \item{}
+\end{itemize}
+
+
+\subsection{LayerDrop**}
+
+\textcolor{red}{LayerDrop is an approach to train over-parameterized networks such that it is possible to extract any sub-network without a post-hoc pruning process. This method takes advantage of the plasticity of neural networks to learn models that are resilient to random pruning.}
+
+Randomly dropping layers during pre-training to allow for efficient inference time pruning. Allows for pruning without the need for healing damage with finetuning and reduces performance loss. \textcolor{red}{If well-chosen groups of weights are dropped simultaneously, the resulting small sub-networks can be very efficient. In particular, we drop entire layers to extract shallow models at inference time.} It is agnostic to other methods and easy to implement.
+
+This work used layer dropping for pre-training BERT encoder transformers.
+
+Previous works have used layer dropping while training convolutional networks as a regularization method to reduce training time.
+
+
+\textbf{Takeaways from Results}
+
+\begin{itemize}
+    \item Reduces PPL from SOTA by 0.6 points. (marginal gains) \textcolor{red}{Are the performance gains more significant in LLMs?}
+    \item Show that the method regularizes the network and improves training stability.
+    \item Show difference in training time.
+    \item \textcolor{red}{Larger performance gains in bigger models?}
+    \item The models pre-trained using LayerDrop perform better when pruned than smaller models of equal size.
+    \item You need not retrain a new model for each desired depth.
+    \item They found that there was not much difference between dropping blocks and dropping layers due to the shallowness of their model. \textcolor{red}{Is the case different for larger models?}
+    \item Dropping heads alone performs worse dropping layers. 
+    \item The higher the drop rate, the better the models perform.
+    \item Head+Layer dropout performs slightly better than layer dropout, but increases the number of parameters which require tuning.
+\end{itemize}
+
+
+\textcolor{blue}{Is there any mechanism in this method which conveys which layers are most redundant and is okay to be dropped during inference?}
+
+\textbf{Their Implementation}
+
+A $(0,1)$ mask matrix $M$ is randomly sampled from a Bernoulli distribution and is directly applied to a group of weights (layers).
+
+\textbf{Possible configurations for structured dropout}
+\begin{itemize}
+    \item{Can prune a layer}
+    \item{Can prune heads, nodes}
+    \item{Implementation: Pointwise multiplication of layer outputs with binary mask randomly set to 1 or 0.}
+    \item{The following are strategies after pre training with layer dropout.}
+    \item{Inference drop strategy 1 - Every other: Set a probability p for every layer at the chance of being dropped.}
+    \item{Inference drop strategy 2 - Search on valid/calibration set: Use a calibration set to find optimal layer dropping configuration. Computationally expensive and can lead to overfitting on the validation set.}
+    \item{Inference drop strategy 3 - Data driven pruning: Learn the drop rate of each layer. Given an average drop rate, you learn an \textcolor{red}{individual drop rate $p_{d}$} for a layer at depth $d$ such that the average drop rate is equivalent to the budget specified by the user. $p_{d}$ is parameterized as a non-linear function of the activation of its layer followed by a softmax. \textcolor{red}{Seems to overlap with our current lora+sparse training and layer pruning implementation.}}
+    \item{The every other layer pruning strategy works pretty well. The other schemes provide marginal benefits.}
+    \item{\textbf{Relationship between droprate and resilience of model to pruning: There is a straightforward relationship between the drop rate of groups and the average pruning level that the network should be resilient to. Assuming N groups and a fixed drop ratio p, the average number of groups used by the network during training is $N(1-p)$. As a consequence, to target a pruning size of r groups, the optimal drop rate is: $p^*=1-\frac{r}{N}$}. Empirical results show that the robustness of the model usually better than the expected ratio. Higher pruning rates lead to better leads to better results for smaller models. The layer drop probability is set to 0.2 for larger models for larger models and 0.5 for smaller models. \textcolor{red}{Seems counter intuitive to me. Didn't existing studies show there is higher redundancy in larger models. So a larger drop rate should not reduce performance in larger models? Is this a difference in traits between BERT models and generative LLMs}}
+\end{itemize}
+
+\textbf{Benefits of layer drop}
+\begin{itemize}
+    \item{Improves robustness of model to performance loss while pruning.}
+    \item{Speeds up training time by randomly dropping significant chunks of the transformer at each train iteration.}
+\end{itemize}
+
+
+\subsubsection{Custom Implementation}
+
+\textbf{Implementation 1: Randomly sample layers to be dropped during LoRA finetuning}
+
+With this configuration, this would mean that a layer in qwen 0.5b would have a $1/47=0.021$ chance of being dropped. The formula for the number for a particular specified probability is $n=totalLayers* p_{layerDrop}$. For a drop rate of 0.2,for qwen 0.5, n is 9.4. So randomly drop 9 layers, including the lora modules, for each sample in the training iteration.
+
+In the paper, there is a mechanism to have custom dropout rates for every model (\textcolor{red}{check out}). Is this equivalent to the consideration that the probability produced by the sigmoid is equivalent to learnt dropout probabilities.
+
+
+
+\subsection{LayerSkip: Early Exit Inference and Self-Speculative Decoding \cite{Elhoushi_2024}}
+Low drop out rate for early layers and high dropout rate for late layers. An early exit loss where \textcolor{red}{all layers share the same exit. So they are mapped to the same classification head? So does this mean, during pretraining, there are predictions made at every layer of the model, and this is considered into the overall training loss? So, it seems the embeddings from each layer is just probed to the final classification layer (not unique for each layer) and then the model is trained. This makes the classification head robust to embeddings from other layers, since early exit indicates the final transformer layer will likely be dropped}. A self-speculative decoding approach where they exit at early layers and verify and correct with remaining layers of the model. \textcolor{red}{But if the remaining layers are used for speculative decoding for each prediction during inference, doesn't it mean that the computational expenses which were saved becomes void? So speculative decoding is used in LLMs anyway to speed up inference. But the method used in this paper builds on that by being cheaper. Still need to understand how speculative decoding works.}
+
+\textbf{Key Contributions}
+\begin{itemize}
+    \item Pre-training combining layer dropout and early exit (classification head is available to each layer).
+    \item Increased robustness to exiting at earlier layers
+    \item Self-speculative decoding solution which decodes with earlier layers and verifies and corrects with later layers.
+\end{itemize}
+
+
+\subsubsection{Their motivation}
+
+\textbf{Analysis of what happens in each layer}
+
+They use an example prompt from HumanEval coding dataset. When generating each token, they check for what's happening in each layer by exiting at each layer and routing to the classification head. Their analysis shows that earlier layers produce incorrect tokens similar to the input token as they have not been transformed properly yet. There is more entropy in the nature of prediction from middle layers, which they refer to as the LLM being "hesitant and change their minds". They also show the last few layers are unnecessary, and the correct prediction often occurs a few layers before the end. They find that they are able to maintain performance with an average of 23.45 out of the model's 32 layers. The idea is to detect when the predictions (or hidden state?) saturate.
+
+
+\textcolor{blue}{"By default, deep learning models are not motivated to predict their final output early and instead spread their compute across all layers Voita et al. (2019, 2023)." - This motivates the use of intermediary layer skipping methods rather than early exit, to minimize the impact of hidden state drift. Their method is aimed towards minimizing the reliance of the model on later layers. }
+
+Other works developed predictors to detect where the predictions saturate in order to early exit \cite{lepori2024racingthoughtsexplaininglarge, geva2022transformerfeedforwardlayersbuild}. \textcolor{blue}{This can probably formulated as where the hidden state transformations saturate.} These predictors may be in the form of an additional LM head, or additional modules.
+
+\textcolor{blue}{We would like to adapt the layers to become robust to drifts in the hidden state after layer pruning pruning. This is done via layer drop during post training, reparameterizing the existing layers to hidden state from pruning layers with LoRA, and using knowledge distillation loss from teacher (full model) rather than supervised finetuning to train the adapters to maintain hidden state of the model in response to layer dropping. Additionally, we introduce a adaptive and input dependent router/mask/layer weighting component to let the model decide which layers are deemed most important for the task/prompt at hand.} 
+
+Layer skip combines early exit with speculative decoding to propose a self-speculative decoding approach which requires no additional layers or models. They add a loss functions enable LM heads to more easily "understand" embeddings of earlier layers. \textcolor{blue}{Though this may not be necessary in our case, since we are trying to have the LoRA layers to compensate and adjust for the drift in hidden state. Although, it is unlikely that the LoRA adapters will be able to fully adjust. So it is likely worth a try.}
+
+Since they do early exit, they adapt the LM head (the final classification layer I assume) via some loss function. \textcolor{blue}{A dynamic layer pruning approach could also benefit from this, since the routing algorithm could choose to allocate recommended final as different from the actual final layer. And, even if intermediary layers are chosen to be pruned by the algorithm, this will change the output of the final layer. But then this means that the purpose for the early exit loss is not valid for a dynamic layer pruning approach. But, it could still bring performance improvements by making the final hidden layer robust to the changing embeddings resultant from layer pruning.}
+
+"We propose using layer dropout and early exit loss during training to create a model that is equivalent to an ensemble of models of various depths." Because when you drop a layer, you essentially get different models via different computational paths.
+
+
+\subsubsection{Token-level Layer Pruning}
+
+So they have a dynamic layer pruning approach which follows the intuition that less layers should be used for easy tokens, while more layers should be used for difficult tokens.
+
+\subsubsection{Layer Dropout}
+
+\begin{itemize}
+    \item{\textcolor{red}{So is this layer dropout implemented  on a token level?}}
+    \item{Higher dropout rate for later layers and lower dropout rate for earlier layers.}
+    \item{Deeply look into their layer dropout regime.}
+\end{itemize}
+
+\subsubsection{Early Exit Loss}
+
+While pre-training, the output embedding of each layer is passed to the final LM classification head, and a loss is considered for each layer. They have some sort of quadratic scaling regime to weight the losses each layer such that the later layers are penalized more for incorrect predictions while the earlier layers are penalized less. They have some sort of rotation curriculum to avoid performance loss via this loss weighting approach (and also avoid increased training times?)
+
+\subsubsection{Self-speculative Decoding}
+
+\textbf{Verification of Early Exit Prediction}
+
+During inference, it is desirable to have a mechanism to verify if the early prediction is correct. Certain approaches use confidence scores \textcolor{blue}{However, using uncertainty may lead to inaccurate verification due to issues from overconfidence or underconfidence. Solving this requires methods for model calibration such as Temperature Scaling, which can be very expensive}. This work uses Speculative Decoding to \textbf{verify and correct} the prediction. 
+
+\textit{How does speculative decoding work?}
+
+It uses a group of tokens to verify the prediction.
+
+\textbf{Self-Speculative Decoding Approach}
+
+Use early exit to generate each token auto-regressively, and then use the remaining layers to verify a group of tokens in parallel.
+
+\textbf{Dealing with reduction in performance}
+
+It is likely that the model performance will reduce if the training procedure is modified for the model to predict early.
+
+
+\textbf{Layer Dropout or Stochastic Depth}
+
+LayerDrop was applied to pre-training BERT transformers, to improve their robustness to layer pruning. Progressively increasing every iteration, \textcolor{red}{as well as every layer?} 
+
+
+
+\textbf{Novelty of this work}
+
+"To the best of our knowledge, layer dropout for training decoder-only models, or scaling language models to large model sizes or large datasets has not been explored. Moreover, our paper is the first to propose using layer dropout to improve early exit inference." \textcolor{blue}{Our work first to apply layer drop to post-training out of the box pre-trained large language models.}
+
+
+\subsubsection{Training Settings and Results}
+
+\begin{itemize}
+    \item{\textbf{Continual Pretraining}: Overall, for earlier layers, LayerSkip is clearly better than the baseline. For last layer accuracy, LayerSkip has minimal drop in accuracy compared to baseline.}
+    \item{\textbf{Pretraining}: }
+    \item{\textbf{Finetuning on code data}: }
+    \item{\textbf{Finetuning on Task-Specific Data}: }
+
+    \item{It seems the bulk of performance improvements come from the early exit loss than just layer drop. \textcolor{red}{This means that it's important to formulate some form of similar loss modification with the motivation to make the classification head robust}}
+
+    \item{\textbf{Trickiness of training with layerdrop from scratch:} When pretraining with layer dropout from scratch, increasing the learning rate is required to maintain accuracy, and tuning learning rate to get optimal accuracy could be tricky and time consuming.}
+\end{itemize}
+
+
+\subsection{Speculative Decoding}
+
+A small model is utilized for drafting a proposal prediction and uses the large one to determine whether to accept or reject it. This method relies on the quality of the small model for proposal drafting. A better drafter results in more accepted token acceptance rates and longer speculated sequences. Only suitable for autoregressive models, not suitable for encoder transformers \cite{leviathan2023fastinferencetransformersspeculative, chen2023acceleratinglargelanguagemodel}. From initial understanding, it seems to be more relevant for token pruning. Though, the prediction mechanism is worth looking at.
+
+Speculative decoding results in no drop in accuracy. A large model is referred to as the main model, while a smaller faster model is used to as the draft model. This results in faster inference compared to the original model but increases memory footprint. Further complexity is also added to maintain the KV cache in two different models.
+
+Speculative decoding helps to rapidly generate tokens.
+
+\subsection{Early Exit Methods}
+
+Early exit methods in decoder only models \cite{geva2022transformerfeedforwardlayersbuild, delcorro2023skipdecodeautoregressiveskipdecoding}.
+
+\subsection{Mask Learning}
+
+ViT-Slimming is a masked-based learning algorithm. The problem with it is that it involves extensive training. This involves heavily retraining the weights of the model. 
+
+
+\subsection{Metric-based Layer Pruning}
+
+Recent works \cite{siddiqui2024deeper,gromov2025the,men2025shortgpt} showed that there exists a large degree of redundancy over the necessity of layers in LLMs. Some works \cite{dejavu_liu23am} attribute this redundancy to the presence of residual connections in modern LLMs which results most of the \textit{crucial} processing being carried out at the earlier layer and while the latter layers result in the embeddings slowly changing. However, it is noted in these works that the last MLP layer connected to the LM head remains crucial to performance, where Elhousi et al.  \cite{Elhoushi_2024} show tuning the LM head to adapt it to the hidden state drift which will occur from pruning can lead to great reduction in performance loss while layer pruning. Other works \cite{men2025shortgpt} note that this redundancy arises when pre-norm transformer blocks are used, that is, layer normalization is placed before the corresponding self-attention and MLP layers. These works propose to detect the most redundant layers by using angular distance to measure how much the embeddings change between the input and output of the layer/block in question.
+
+Gromov et al. \cite{gromov2025the} propose a method of pruning from 
+
+\subsubsection{Calibration Set}
+
+
+\subsubsection{Healing Damage}
+
+Gromov et al. \cite{gromov2025the} uses a small amount of finetuning via QLoRA and supervised finetuning (SFT) to heal the mismatch in the embeddings resulting from layer pruning. \textcolor{blue}{Is it more effective to tune the LM head to become \textit{robust} to the changes in embeddings, than to tune the intermediate layers. Or is the best approach to use a method which both \textbf{reparametrizes the intermediary layers so that the hidden state drift is minimized upon pruning layers while simultaneously tuning the LM head to become robust hidden state drift}. } \textcolor{red}{Will there be some benefit to alternating training strategies?}
+
+Are QLoRA modules applied across the whole network to heal damage? They did SFT on the (Colossal Clean Crawled Corpus) C4 dataset.
+
+Siddiqui \cite{siddiqui2024deeper} use emulated update (additive average) to recover performance. They also place and train LoRA adapters in place of pruned layers, but they suggest learning algorithms could lead to catastrophic forgetting or overfitting (\textcolor{red}{something to test for}). They try 3 different training regimes for these lora adapters (i) minimize MSE between output of pruned block and low rank matrices (ii) SFT on final output and (iii) logit distillation of final model output. Adapters were trained for 800 steps with an effective batch size of 8. Their performance when using linear adapters with logit distillation performs best. Though they note that this results in overfitting to training corpus. And that emulated update is comparable.
+
+\subsubsection{Benchmarks}
+
+Gromov et al. \cite{gromov2025the} evaluate on question answering benchmarks: 5-shot MMLU accuracy which is a common world knowledge and problem solving benchmark. BoolQ which is a common yes/no reading comprehension benchmark.
+
+\subsubsection{Baselines}
+
+
+\subsubsection{Results}
+
+\textbf{Results of Goromov et al. \cite{gromov2025the}}
+
+On MMLU (4 choice MCQ - random baseline $25\%$), performance robust to pruning until about $45\%-55\%$ sparsity, after which a sharp drop off in performance is observed. But this point of performance drop off varies based on model family. The performance drops of faster $20\%-30\%$ in the Qwen family of models. The knowledge necessary to solve problems is lost at some particular point, and it is different for different models. \textcolor{red}{Is there some difference between the training schemes of Llama and Qwen which causes this performance drop off?} Finetuning pushes this drop off point to slightly higher levels of sparsity. They claim that larger and deeper models are more robust to layer pruning which they hypothesize is because smaller models are more overtrained \textcolor{red}{but from the results it seems that this drop off point is not really shifted as per percentage of layers dropped, but in terms raw number of layers which can be dropped, more layers can be dropped from larger models till this drop off point is reached}. They claim that finetuning significantly restores performance and robustness to layer pruning, but they show that performance restoration on the very dataset on which they finetuned. But when evaluating on MMLU, this impact is less pronounced. \textcolor{blue}{Bring this point up and show that our sparse training method leads to more pronounced improvements outside the finetuning/healing set (C4 dataset).}
+
+Their claimed generalizations from results: The layers with the smallest angular distance are more pruneable. The last layer should never be pruned \textcolor{red}{directly motivating against early exit, though, in early exit each layer has its own classification head... how much computation overhead do these LM heads add? Not any if the classification head is shared across all layers}. Weird observations in qwen that the points of highest angular distance is more patched like islands across the layers of the model rather than just being focused towards the early layers and final layer. Their main proposed simple pruning strategy: Prune backwards (early exit) except the last layer and then finetune to restore. From the results, it seems that cosine similarity performs better, and after finetuning both perform similarly. Though, their proposed method of pruning requires no additional compute to be performed on a calibration set. Healing leads to lower losses in response to layer pruning, but this does not translate into improved accuracy on MMLU.
+
+
+\textbf{Results of Siddiqui et al. \cite{siddiqui2024deeper}}
+
+They propose a method for computing adaptive layer importance rankings based on Shapely values (found to be very expensive). They note that this improves performance on the task at hand but reduces generalizability to other tasks.
+
+They can remove 33\% of self-attention layers (so 15\% of overall layers) without a significant drop in performance. They highlight the differing impact which different metrics have on downstream performance on MMLU. They also separately evaluate the importance of MLP and MHSA layers unlike previous work \cite{gromov2025the}. They show that using the additive average of that block performs on par with or better than learning algorithms, because learning algorithms could lead to overfitting or catastrophic forgetting. They use 150k sequences with a context length of 2048 as their calibration set.
+
+\textbf{Results of ShortGPT \cite{men2025shortgpt}}
+
+They note that when they remove 25\% of the layers on 7B models, the performance on certain generative tasks like XSum and C3 decreases to nearly zero. While the performance drop is not that significant on larger 13B models.
+
+\subsection{Layer Stitching}
+
+
+
+\subsection{Interpretibility Works}
+
+Are factual associations stored across layers with any discernable patterns? And if there is, can some association be formed between these interpretability patterns and pruning layers for some sort of informative evaluation. How does localization of knowledge and problem solving skills work across layers. What's the existing concensus on that? 
+
+\section{Experiments}
+
+
+\subsection{Datasets}
+
+We want to evaluate on datasets that vary in difficulty, with the intuition that easier problems should require less computation \citep{ding2024easyhardbench}. It is difficult to profile a particular dataset as being easy or hard. It is more likely that certain samples in datasets can be easy, while other samples will be hard. Recent work \citep{ding2024easyhardbench} introduces the Easy2hard-Bench comprising of 6 datasets of varying types, which include E2H-AMC, E2H-Codeforces, C2H-Lichess, E2H-GSM8K, E2H-ARC and E2H-Winogrande. Each problem is annotated with numerical difficulty scores, which are computed using established difficulty ranking systems such as Item Response Theory and Glicko-2 models. This work posits that problem difficulty need not depend on domain nature, rather, samples are determined as difficult if they can only be solved by examinees with sufficient expertise. 
+
+We evaluate the effect of layer pruning on problems segregated into 3 groups- easy, medium and hard- determined by the difficulty assigned in the dataset by the respective metrics \citep{ding2024easyhardbench}.
+
+
+\subsubsection{Calibration Sets}
+
+Gromov et al (2024) \cite{gromov2025the} did healing with 4-bit quantization QLoRA using C4 with 164M or 328M tokens. No mention about context length. Default size of calibration set in code in Siddiqui et al. \cite{siddiqui2024deeper} is 1000000 with a context size of 1024 and they use the MMLU dataset directly to compute shapely importance on MMLU.
+
+
+\subsection{Baselines}
+
+\begin{itemize}
+    \item Cosine metric \cite{men2025shortgpt,gromov2025the}
+    \item Cosine metric + QLoRA on remaining blocks \cite{gromov2025the}
+    \item Cosine + emulated update \cite{siddiqui2024deeper}: Additive bias. Compute empirical additive mean of a particular layer. Calculate the average difference between the input and output of a layer over a calibration set. 
+    \item Iterative MMLU Shapely \cite{siddiqui2024deeper}
+    \item Attention Only \cite{siddiqui2024deeper}: Significant because it reduces the burden of KV cache.
+    \item Early Exit \cite{gromov2025the}
+    \item LoRA Adapter In placed of the pruned block \cite{siddiqui2024deeper}: Three different ways of training. 1. Minimize MSE between output of pruned block and low rank adapter. 2. SFT on final model output. 3. logit distillation on model output.
+    \item Relative L1
+    \item Relative L2
+    \item Shapely Value \cite{siddiqui2024deeper}: It is computed by calculating the marginal loss in performance in the absence of that layer. They consider this an upper bound. (\textcolor{red}{Very similar to the PPL importance used.})
+    \item Layer Importance on Calibration (Cheating)
+    \item Relative Magnitude: Assumes layers with larger $\left\|\frac{f(x)}{x+f(x)}\right\|$ is of higher importance.
+    \item \textcolor{red}{Compute average inverse cosine similarity?}
+\end{itemize}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\appendix
+
+\section{Appendix / supplemental material}
+
+
+\subsection{Hyperparameters}
+
+\subsubsection{Qwen0.5B - Wiki to Wiki}
+
+When finetuning qwen 0.5B with LoRA trained for 50 epochs on 2000 samples of wikitext. A learning rate of $1e-5$, layer drop 0.2, l1 w 0.0001, r8, alpha 8, gradaccum 4 works best at the moment.
+
+
+
+\subsubsection{Qwen0.5B - Nemo to Wiki to Wiki}
+
+The same hyperparams used in wiki2wiki seem to work best here. The performance is competitive until 20 \% sparsity, but drops off after.
+
+
+\subsubsection{Qwen0.5B - openwebtext}
+
+The layer drop models don't seem to be performing as well. The nemotron finetuned code is working better here.
+
+
+\subsubsection{Qwen0.5B - Nemotron Post Training}
+
+The nemotron post trained model perform extremely well at lower levels of sparsity, but the performance doesnt keep up at higher levels of sparsity
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+\end{document}
